@@ -26,6 +26,8 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin && NODE_ENV !== 'production') return callback(null, true);
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // En dev, le port du serveur Vite varie selon ce qui tourne déjà sur la machine
+    if (NODE_ENV !== 'production' && /^https?:\/\/localhost:\d+$/.test(origin)) return callback(null, true);
     callback(new Error(`CORS bloqué pour: ${origin}`));
   },
 }));
@@ -61,8 +63,15 @@ const migrate = require('./config/migrate');
     } else {
       console.warn('⚠️ DATABASE_URL non défini — migrations ignorées');
     }
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Backend NITA Agences démarré sur http://localhost:${PORT}`);
+    });
+
+    // Arrêt propre requis par Railway (SIGTERM lors d'un redéploiement)
+    process.on('SIGTERM', () => {
+      console.log('🛑 SIGTERM reçu — arrêt du serveur');
+      server.close(() => process.exit(0));
+      setTimeout(() => process.exit(1), 10000);
     });
   } catch (err) {
     console.error('❌ Erreur fatale au démarrage:', err.message);

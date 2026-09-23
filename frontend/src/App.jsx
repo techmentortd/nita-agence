@@ -10,6 +10,7 @@ import AboutPage from './pages/AboutPage';
 import AgencyDetailPage from './pages/AgencyDetailPage';
 import LoginPage from './pages/LoginPage';
 import AdminPage from './pages/AdminPage';
+import InstallPrompt from './components/InstallPrompt';
 
 function Layout({ children, noFooter }) {
   return (
@@ -17,6 +18,7 @@ function Layout({ children, noFooter }) {
       <Header />
       {children}
       {!noFooter && <Footer />}
+      <InstallPrompt />
     </div>
   );
 }

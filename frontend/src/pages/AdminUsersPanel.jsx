@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Trash2, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchAdmins, createAdmin, deleteAdmin } from '../services/services';
+import { ZONES } from '../utils/zones';
+import ZoneBadge from '../components/ZoneBadge';
 
 export default function AdminUsersPanel() {
   const { username: myUsername } = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ username: '', password: '', zone: '' });
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
 
@@ -20,7 +22,7 @@ export default function AdminUsersPanel() {
 
   const createMut = useMutation({
     mutationFn: createAdmin,
-    onSuccess: () => { invalidate(); setForm({ username: '', password: '' }); setOpen(false); setError(''); },
+    onSuccess: () => { invalidate(); setForm({ username: '', password: '', zone: '' }); setOpen(false); setError(''); },
     onError: (e) => setError(e.response?.data?.message || 'Erreur lors de la création'),
   });
 
@@ -75,6 +77,20 @@ export default function AdminUsersPanel() {
                 required
               />
             </div>
+            <div>
+              <label htmlFor="new-admin-zone">Zone (le nouvel admin en devient le chef)</label>
+              <select
+                id="new-admin-zone"
+                value={form.zone}
+                onChange={(e) => setForm((f) => ({ ...f, zone: e.target.value }))}
+                required
+              >
+                <option value="" disabled>Choisir une zone…</option>
+                {ZONES.map((z) => (
+                  <option key={z.id} value={z.id}>{z.nom}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="admin-form-actions">
             <button type="submit" className="btn btn-orange" disabled={createMut.isPending}>
@@ -92,13 +108,14 @@ export default function AdminUsersPanel() {
           <thead>
             <tr>
               <th>Utilisateur</th>
+              <th>Zone</th>
               <th>Créé le</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={3} style={{ textAlign: 'center', padding: 24 }}>Chargement…</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'center', padding: 24 }}>Chargement…</td></tr>
             ) : (
               admins.map((a) => (
                 <tr key={a.id}>
@@ -106,6 +123,7 @@ export default function AdminUsersPanel() {
                     {a.username}
                     {a.username === myUsername && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--t3)', fontWeight: 600 }}>(vous)</span>}
                   </td>
+                  <td data-label="Zone"><ZoneBadge zone={a.zone} /></td>
                   <td data-label="Créé le">{a.created_at ? new Date(a.created_at).toLocaleDateString('fr-FR') : '—'}</td>
                   <td data-label="Actions" className="admin-table-actions-cell">
                     {a.username !== myUsername && (

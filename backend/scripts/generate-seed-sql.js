@@ -14,11 +14,11 @@ const header = `-- Agences NITA réelles à N'Djamena, Tchad — extraites de la
 -- modifier la source puis relancer: node scripts/generate-seed-sql.js
 TRUNCATE agences RESTART IDENTITY;
 
-INSERT INTO agences (nom, type, quartier, adresse, telephone, latitude, longitude, horaires, services) VALUES\n`;
+INSERT INTO agences (nom, type, quartier, zone, adresse, telephone, latitude, longitude, horaires, services) VALUES\n`;
 
 const rows = agences.map((a) => {
   const services = sqlStr(JSON.stringify(a.services));
-  return `(${sqlStr(a.nom)}, ${sqlStr(a.type)}, ${sqlStr(a.quartier)}, ${sqlStr(a.adresse)}, ${sqlStr(a.telephone)}, ${a.latitude}, ${a.longitude}, ${sqlStr(a.horaires)}, ${services})`;
+  return `(${sqlStr(a.nom)}, ${sqlStr(a.type)}, ${sqlStr(a.quartier)}, ${sqlStr(a.zone)}, ${sqlStr(a.adresse)}, ${sqlStr(a.telephone)}, ${a.latitude}, ${a.longitude}, ${sqlStr(a.horaires)}, ${services})`;
 });
 
 const sql = header + rows.join(',\n') + ';\n';

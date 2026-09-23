@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { LocateFixed, ChevronUp, LayoutGrid, Building2, Navigation, MapPin, Star, Phone } from 'lucide-react';
+import { LocateFixed, ChevronUp, LayoutGrid, Building2, Navigation, MapPin, Star, Phone, Download, Check, WifiOff } from 'lucide-react';
 import { fetchAgences } from '../services/services';
 import { fmtDist } from '../utils/utils';
+import { saveAgences, getAllAgences } from '../lib/db';
+import { downloadOfflineMap, getOfflineMapCacheInfo, estimateTileCount } from '../lib/offlineMap';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -43,6 +45,14 @@ export default function AgencyMap() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [offlineData, setOfflineData] = useState(false);
+  const [dlState, setDlState] = useState('idle'); // idle | downloading | done | error
+  const [dlProgress, setDlProgress] = useState({ done: 0, total: 0 });
+  const [tileCache, setTileCache] = useState({ cached: 0 });
+
+  useEffect(() => {
+    getOfflineMapCacheInfo().then(setTileCache);
+  }, [dlState]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -50,15 +60,40 @@ export default function AgencyMap() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  /* ── Chargement des agences (score recalculé côté serveur dès qu'on a le GPS) ── */
+  /* ── Chargement des agences (score recalculé côté serveur dès qu'on a le GPS) ──
+     Hors ligne : repli sur la copie IndexedDB (le tri par distance se fait
+     alors côté client, la formule est la même que côté serveur). */
   useEffect(() => {
     const params = geoOk ? { lat: userLocation.lat, lng: userLocation.lng } : {};
     fetchAgences(params)
       .then((rows) => {
         setAgences(rows || []);
+        setOfflineData(false);
         setLoading(false);
+        if (rows?.length) saveAgences(rows);
       })
-      .catch(() => setLoading(false));
+      .catch(async () => {
+        const cached = await getAllAgences();
+        if (cached.length) {
+          const withDist = geoOk
+            ? cached
+                .map((a) => {
+                  const R = 6371;
+                  const toRad = (d) => (d * Math.PI) / 180;
+                  const dLat = toRad(a.latitude - userLocation.lat);
+                  const dLng = toRad(a.longitude - userLocation.lng);
+                  const h =
+                    Math.sin(dLat / 2) ** 2 +
+                    Math.cos(toRad(userLocation.lat)) * Math.cos(toRad(a.latitude)) * Math.sin(dLng / 2) ** 2;
+                  return { ...a, distance_km: Math.round(R * 2 * Math.asin(Math.min(1, Math.sqrt(h))) * 100) / 100 };
+                })
+                .sort((a, b) => a.distance_km - b.distance_km)
+            : cached;
+          setAgences(withDist);
+          setOfflineData(true);
+        }
+        setLoading(false);
+      });
   }, [geoOk]);
 
   /* ── Géolocalisation ── */
@@ -222,6 +257,18 @@ export default function AgencyMap() {
     if (withRoute) setTimeout(() => drawRoute(a), 200);
   };
 
+  const handleDownloadOfflineMap = async () => {
+    setDlState('downloading');
+    setDlProgress({ done: 0, total: estimateTileCount() });
+    try {
+      await downloadOfflineMap((done, total) => setDlProgress({ done, total }));
+      setDlState('done');
+      getOfflineMapCacheInfo().then(setTileCache);
+    } catch {
+      setDlState('error');
+    }
+  };
+
   const filtered = getFiltered();
 
   const SHEET_H = 340;
@@ -370,6 +417,44 @@ export default function AgencyMap() {
           <span style={{ fontSize: 11, color: geoOk && !geoFar ? '#16a34a' : '#4b5872', display: 'flex', alignItems: 'center', gap: 3 }}>
             <MapPin size={11} /> {geoOk && !geoFar ? 'Localisé' : "N'Djamena"}
           </span>
+        </div>
+
+        {offlineData && (
+          <div style={{ padding: '8px 14px', background: '#fff7ed', borderBottom: '1px solid #e5e9f0', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#c2410c' }}>
+            <WifiOff size={12} /> Données hors ligne (dernière synchro)
+          </div>
+        )}
+
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e9f0', flexShrink: 0 }}>
+          {dlState === 'downloading' ? (
+            <div>
+              <div style={{ fontSize: 11, color: '#4b5872', fontWeight: 700, marginBottom: 5 }}>
+                Téléchargement de la carte… {dlProgress.done}/{dlProgress.total}
+              </div>
+              <div style={{ height: 6, background: '#eef1f6', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${dlProgress.total ? (dlProgress.done / dlProgress.total) * 100 : 0}%`, background: ORANGE, transition: 'width .2s' }} />
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={handleDownloadOfflineMap}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '8px 10px', fontSize: 12, fontWeight: 700, borderRadius: 9,
+                border: `1px solid ${dlState === 'done' ? '#bbf7d0' : '#e5e9f0'}`,
+                background: dlState === 'done' ? '#f0fdf4' : '#f8f9fb',
+                color: dlState === 'done' ? '#16a34a' : '#142244',
+                cursor: 'pointer',
+              }}
+            >
+              {dlState === 'done' ? <Check size={13} /> : <Download size={13} />}
+              {dlState === 'done'
+                ? `Carte disponible hors ligne (${tileCache.cached} tuiles)`
+                : dlState === 'error'
+                ? 'Échec — réessayer'
+                : "Télécharger la carte hors ligne"}
+            </button>
+          )}
         </div>
 
         <div className="map-sidebar-panel" style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>

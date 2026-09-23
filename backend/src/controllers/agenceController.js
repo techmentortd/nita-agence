@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const fallbackAgences = require('../data/agencesSeed');
+const { ZONE_IDS } = require('../data/zones');
 
 // Sans DATABASE_URL (pas de DB locale), on sert le jeu de données de secours
 // pour que le frontend reste utilisable en développement.
@@ -88,7 +89,7 @@ exports.getById = async (req, res, next) => {
   }
 };
 
-const REQUIRED_FIELDS = ['nom', 'quartier', 'adresse', 'latitude', 'longitude'];
+const REQUIRED_FIELDS = ['nom', 'quartier', 'zone', 'adresse', 'latitude', 'longitude'];
 
 function validate(body) {
   for (const f of REQUIRED_FIELDS) {
@@ -97,7 +98,17 @@ function validate(body) {
   if (!isFinite(parseFloat(body.latitude)) || !isFinite(parseFloat(body.longitude))) {
     return 'Coordonnées GPS invalides';
   }
+  if (!ZONE_IDS.includes(body.zone)) {
+    return 'Zone invalide';
+  }
   return null;
+}
+
+// Un admin rattaché à une zone (chef de zone) ne gère que les agences de
+// cette zone. Un admin sans zone (super-admin, ex. le compte de seed) gère
+// tout. `admin.zone` vient du token JWT (voir authController.login).
+function forbiddenZone(admin, zone) {
+  return !!admin?.zone && admin.zone !== zone;
 }
 
 exports.create = async (req, res, next) => {
@@ -106,18 +117,23 @@ exports.create = async (req, res, next) => {
     if (error) return res.status(400).json({ message: error });
 
     const { nom, type = 'standard', quartier, adresse, telephone = null, latitude, longitude, horaires = '', services = [] } = req.body;
+    // Un chef de zone ne peut créer que dans sa propre zone.
+    const zone = req.admin?.zone || req.body.zone;
+    if (forbiddenZone(req.admin, zone)) {
+      return res.status(403).json({ message: 'Vous ne pouvez créer une agence que dans votre zone' });
+    }
 
     if (useFallback) {
       const nextId = fallbackAgences.reduce((max, a) => Math.max(max, a.id), 0) + 1;
-      const agence = { id: nextId, nom, type, quartier, adresse, telephone, latitude: parseFloat(latitude), longitude: parseFloat(longitude), horaires, services, actif: true, disponible: true };
+      const agence = { id: nextId, nom, type, quartier, zone, adresse, telephone, latitude: parseFloat(latitude), longitude: parseFloat(longitude), horaires, services, actif: true, disponible: true };
       fallbackAgences.push(agence);
       return res.status(201).json({ message: 'ok', data: agence });
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO agences (nom, type, quartier, adresse, telephone, latitude, longitude, horaires, services)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [nom, type, quartier, adresse, telephone, latitude, longitude, horaires, JSON.stringify(services)]
+      `INSERT INTO agences (nom, type, quartier, zone, adresse, telephone, latitude, longitude, horaires, services)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [nom, type, quartier, zone, adresse, telephone, latitude, longitude, horaires, JSON.stringify(services)]
     );
     res.status(201).json({ message: 'ok', data: rows[0] });
   } catch (err) {
@@ -130,19 +146,28 @@ exports.update = async (req, res, next) => {
     const error = validate(req.body);
     if (error) return res.status(400).json({ message: error });
 
-    const { nom, type = 'standard', quartier, adresse, telephone = null, latitude, longitude, horaires = '', services = [] } = req.body;
+    const { nom, type = 'standard', quartier, zone, adresse, telephone = null, latitude, longitude, horaires = '', services = [] } = req.body;
 
     if (useFallback) {
       const agence = fallbackAgences.find((a) => String(a.id) === req.params.id);
       if (!agence) return res.status(404).json({ message: 'Agence introuvable' });
-      Object.assign(agence, { nom, type, quartier, adresse, telephone, latitude: parseFloat(latitude), longitude: parseFloat(longitude), horaires, services });
+      if (forbiddenZone(req.admin, agence.zone) || forbiddenZone(req.admin, zone)) {
+        return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+      }
+      Object.assign(agence, { nom, type, quartier, zone, adresse, telephone, latitude: parseFloat(latitude), longitude: parseFloat(longitude), horaires, services });
       return res.json({ message: 'ok', data: agence });
     }
 
+    const { rows: current } = await pool.query('SELECT zone FROM agences WHERE id = $1 AND actif = true', [req.params.id]);
+    if (!current.length) return res.status(404).json({ message: 'Agence introuvable' });
+    if (forbiddenZone(req.admin, current[0].zone) || forbiddenZone(req.admin, zone)) {
+      return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+    }
+
     const { rows } = await pool.query(
-      `UPDATE agences SET nom=$1, type=$2, quartier=$3, adresse=$4, telephone=$5, latitude=$6, longitude=$7, horaires=$8, services=$9
-       WHERE id=$10 AND actif=true RETURNING *`,
-      [nom, type, quartier, adresse, telephone, latitude, longitude, horaires, JSON.stringify(services), req.params.id]
+      `UPDATE agences SET nom=$1, type=$2, quartier=$3, zone=$4, adresse=$5, telephone=$6, latitude=$7, longitude=$8, horaires=$9, services=$10
+       WHERE id=$11 AND actif=true RETURNING *`,
+      [nom, type, quartier, zone, adresse, telephone, latitude, longitude, horaires, JSON.stringify(services), req.params.id]
     );
     if (!rows.length) return res.status(404).json({ message: 'Agence introuvable' });
     res.json({ message: 'ok', data: rows[0] });
@@ -156,11 +181,17 @@ exports.toggleDisponible = async (req, res, next) => {
     if (useFallback) {
       const agence = fallbackAgences.find((a) => String(a.id) === req.params.id);
       if (!agence) return res.status(404).json({ message: 'Agence introuvable' });
+      if (forbiddenZone(req.admin, agence.zone)) {
+        return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+      }
       agence.disponible = req.body.disponible !== undefined ? !!req.body.disponible : !agence.disponible;
       return res.json({ message: 'ok', data: agence });
     }
-    const { rows: current } = await pool.query('SELECT disponible FROM agences WHERE id = $1 AND actif = true', [req.params.id]);
+    const { rows: current } = await pool.query('SELECT disponible, zone FROM agences WHERE id = $1 AND actif = true', [req.params.id]);
     if (!current.length) return res.status(404).json({ message: 'Agence introuvable' });
+    if (forbiddenZone(req.admin, current[0].zone)) {
+      return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+    }
     const next = req.body.disponible !== undefined ? !!req.body.disponible : !current[0].disponible;
     const { rows } = await pool.query('UPDATE agences SET disponible = $1 WHERE id = $2 RETURNING *', [next, req.params.id]);
     res.json({ message: 'ok', data: rows[0] });
@@ -174,8 +205,16 @@ exports.remove = async (req, res, next) => {
     if (useFallback) {
       const idx = fallbackAgences.findIndex((a) => String(a.id) === req.params.id);
       if (idx === -1) return res.status(404).json({ message: 'Agence introuvable' });
+      if (forbiddenZone(req.admin, fallbackAgences[idx].zone)) {
+        return res.status(403).json({ message: 'Vous ne pouvez supprimer que les agences de votre zone' });
+      }
       fallbackAgences[idx].actif = false;
       return res.json({ message: 'ok' });
+    }
+    const { rows: current } = await pool.query('SELECT zone FROM agences WHERE id = $1 AND actif = true', [req.params.id]);
+    if (!current.length) return res.status(404).json({ message: 'Agence introuvable' });
+    if (forbiddenZone(req.admin, current[0].zone)) {
+      return res.status(403).json({ message: 'Vous ne pouvez supprimer que les agences de votre zone' });
     }
     const { rowCount } = await pool.query('UPDATE agences SET actif = false WHERE id = $1', [req.params.id]);
     if (!rowCount) return res.status(404).json({ message: 'Agence introuvable' });

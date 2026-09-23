@@ -24,8 +24,9 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ message: 'Identifiants incorrects' });
     }
 
-    const token = jwt.sign({ id: admin.id, username: admin.username }, process.env.JWT_SECRET, { expiresIn: '12h' });
-    res.json({ message: 'ok', data: { token, username: admin.username } });
+    const zone = admin.zone || null;
+    const token = jwt.sign({ id: admin.id, username: admin.username, zone }, process.env.JWT_SECRET, { expiresIn: '12h' });
+    res.json({ message: 'ok', data: { token, username: admin.username, zone } });
   } catch (err) {
     next(err);
   }

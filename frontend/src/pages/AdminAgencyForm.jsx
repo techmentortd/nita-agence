@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { LocateFixed } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { ZONES } from '../utils/zones';
 
-const EMPTY = { nom: '', type: 'standard', quartier: '', adresse: '', telephone: '', latitude: '', longitude: '', horaires: '7h-23h, tous les jours', services: 'Dépôt, Retrait, Transfert national' };
+const EMPTY = { nom: '', type: 'standard', quartier: '', zone: '', adresse: '', telephone: '', latitude: '', longitude: '', horaires: '7h-23h, tous les jours', services: 'Dépôt, Retrait, Transfert national' };
 
 export default function AdminAgencyForm({ initial, onCancel, onSubmit, saving }) {
+  const { zone: adminZone } = useAuth();
+  // Un chef de zone ne peut créer/modifier que dans sa propre zone.
   const [form, setForm] = useState(() =>
     initial
       ? { ...initial, services: (initial.services || []).join(', ') }
-      : EMPTY
+      : { ...EMPTY, zone: adminZone || '' }
   );
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
@@ -65,6 +69,20 @@ export default function AdminAgencyForm({ initial, onCancel, onSubmit, saving })
         <div>
           <label htmlFor="quartier">Quartier</label>
           <input id="quartier" value={form.quartier} onChange={set('quartier')} required />
+        </div>
+        <div>
+          <label htmlFor="zone">Zone</label>
+          <select id="zone" value={form.zone} onChange={set('zone')} disabled={!!adminZone} required>
+            <option value="" disabled>Choisir une zone…</option>
+            {ZONES.map((z) => (
+              <option key={z.id} value={z.id}>{z.nom}</option>
+            ))}
+          </select>
+          {adminZone && (
+            <span style={{ fontSize: 11, color: 'var(--t3)', display: 'block', marginTop: 4 }}>
+              Vous êtes chef de zone — limité à votre zone.
+            </span>
+          )}
         </div>
         <div>
           <label htmlFor="telephone">Téléphone</label>

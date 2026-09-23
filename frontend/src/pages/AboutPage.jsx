@@ -1,6 +1,9 @@
-import { Building2, Smartphone, Wallet, ArrowLeftRight, BookOpen, Headset, ShieldCheck, Phone, Mail, Clock } from 'lucide-react';
+import { Building2, Smartphone, Wallet, ArrowLeftRight, BookOpen, Headset, ShieldCheck, Phone, Mail, Clock, Download, CheckCircle2 } from 'lucide-react';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 export function AboutPage() {
+  const { canInstall, installed, promptInstall } = useInstallPrompt();
+
   return (
     <>
       <section className="about-hero">
@@ -93,6 +96,29 @@ export function AboutPage() {
               <span>Un accès simplifié à l'assistance NITA en cas de besoin.</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="about-block">
+        <div className="about-install">
+          <div className="about-install-icon"><Smartphone size={22} /></div>
+          <div className="about-install-text">
+            <strong>Installer NITA Agences sur votre téléphone</strong>
+            <span>
+              {installed
+                ? 'Application déjà installée — vous pouvez la lancer depuis votre écran d\'accueil.'
+                : canInstall
+                  ? 'Accès rapide et carte disponible hors connexion, sans passer par le navigateur.'
+                  : 'Android/Chrome : menu ⋮ → « Installer l\'application ». iPhone/Safari : bouton Partager → « Sur l\'écran d\'accueil ».'}
+            </span>
+          </div>
+          {installed ? (
+            <span className="about-install-done"><CheckCircle2 size={16} /> Installée</span>
+          ) : canInstall ? (
+            <button className="about-install-btn" onClick={promptInstall}>
+              <Download size={14} /> Télécharger l'application
+            </button>
+          ) : null}
         </div>
       </section>
 

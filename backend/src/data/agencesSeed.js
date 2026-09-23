@@ -8,6 +8,8 @@
 //
 // Source unique — seed.sql est généré à partir de ce fichier
 // (voir backend/scripts/generate-seed-sql.js).
+const { zoneForQuartier } = require('./zones');
+
 const SERVICES = ['Dépôt', 'Retrait', 'Transfert national'];
 const HORAIRES = '7h-23h, tous les jours';
 const TEL = '+235 97 78 78 78';
@@ -60,6 +62,7 @@ module.exports = RAW.map(([nom, type, quartier, adresse, latitude, longitude], i
   nom,
   type,
   quartier,
+  zone: zoneForQuartier(quartier),
   adresse,
   telephone: TEL,
   latitude,

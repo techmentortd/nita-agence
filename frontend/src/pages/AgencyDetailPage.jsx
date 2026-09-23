@@ -8,10 +8,18 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, MapPin, Phone, Clock, Building2, Navigation, Star, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Clock, Building2, Navigation, Star, ShieldCheck, MessageCircle } from 'lucide-react';
 import { useGeoPosition } from '../hooks/useGeoPosition';
 import { fetchAgenceById, fetchAgences } from '../services/services';
 import { fmtDist } from '../utils/utils';
+import ZoneBadge from '../components/ZoneBadge';
+
+function whatsappLink(telephone, nom) {
+  const digits = (telephone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const text = encodeURIComponent(`Bonjour, je voudrais des informations sur l'agence NITA ${nom || ''}.`.trim());
+  return `https://wa.me/${digits}?text=${text}`;
+}
 
 const ORANGE = '#f2701e';
 const BLUE = '#143b8f';
@@ -36,6 +44,7 @@ export function AgencyDetailPage() {
 
   const distance = scored?.find((a) => String(a.id) === String(id))?.distance_km;
   const isPrincipale = agence?.type === 'principale';
+  const waLink = agence ? whatsappLink(agence.telephone, agence.nom) : null;
 
   useEffect(() => {
     if (!agence || !mapContainerRef.current) return;
@@ -115,6 +124,7 @@ export function AgencyDetailPage() {
             {isPrincipale ? <Star size={11} /> : <Building2 size={11} />}
             {isPrincipale ? 'Principale' : 'Standard'}
           </span>
+          {agence.zone && <ZoneBadge zone={agence.zone} />}
         </div>
 
         <div className="adetail-hero-bottom">
@@ -132,6 +142,11 @@ export function AgencyDetailPage() {
           {agence.telephone && (
             <a href={`tel:${agence.telephone}`} className="adetail-btn adetail-btn-primary">
               <Phone size={14} /> Appeler
+            </a>
+          )}
+          {waLink && (
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="adetail-btn adetail-btn-whatsapp">
+              <MessageCircle size={14} /> WhatsApp
             </a>
           )}
           <button onClick={() => navigate(`/carte?agenceId=${agence.id}`)} className="adetail-btn adetail-btn-outline">
