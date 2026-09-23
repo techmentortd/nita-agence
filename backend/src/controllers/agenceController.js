@@ -104,7 +104,7 @@ function validate(body) {
   return null;
 }
 
-// Un admin rattaché à une zone (chef de zone) ne gère que les agences de
+// Un admin rattaché à une zone (chef d'agence) ne gère que les agences de
 // cette zone. Un admin sans zone (super-admin, ex. le compte de seed) gère
 // tout. `admin.zone` vient du token JWT (voir authController.login).
 function forbiddenZone(admin, zone) {

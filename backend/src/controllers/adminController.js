@@ -5,13 +5,22 @@ const { ZONE_IDS } = require('../data/zones');
 
 const useFallback = !process.env.DATABASE_URL;
 
+// Un admin sans zone est un super-admin (compte de secours, ex. le seed
+// mz.admin) — il reste invisible pour les chefs d'agence (admins avec zone).
+function visibleTo(admin, requester) {
+  return !!admin.zone || !requester?.zone;
+}
+
 exports.list = async (req, res, next) => {
   try {
     if (useFallback) {
-      return res.json({ message: 'ok', data: fallbackAdmins.map(({ password_hash, ...a }) => a) });
+      const data = fallbackAdmins
+        .map(({ password_hash, ...a }) => a)
+        .filter((a) => visibleTo(a, req.admin));
+      return res.json({ message: 'ok', data });
     }
     const { rows } = await pool.query('SELECT id, username, zone, created_at FROM admins ORDER BY created_at ASC');
-    res.json({ message: 'ok', data: rows });
+    res.json({ message: 'ok', data: rows.filter((a) => visibleTo(a, req.admin)) });
   } catch (err) {
     next(err);
   }
@@ -26,7 +35,7 @@ exports.create = async (req, res, next) => {
     if (password.length < 6) {
       return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 6 caractères' });
     }
-    // Chaque nouvel admin est le chef d'une zone — obligatoire à la création.
+    // Chaque nouvel admin est chef d'agence pour une zone — obligatoire à la création.
     if (!ZONE_IDS.includes(zone)) {
       return res.status(400).json({ message: 'Zone requise (le nouvel admin devient le chef de cette zone)' });
     }
@@ -70,7 +79,9 @@ exports.remove = async (req, res, next) => {
         return res.status(400).json({ message: 'Impossible de supprimer le dernier compte admin' });
       }
       const idx = fallbackAdmins.findIndex((a) => String(a.id) === req.params.id);
-      if (idx === -1) return res.status(404).json({ message: 'Admin introuvable' });
+      if (idx === -1 || !visibleTo(fallbackAdmins[idx], req.admin)) {
+        return res.status(404).json({ message: 'Admin introuvable' });
+      }
       fallbackAdmins.splice(idx, 1);
       return res.json({ message: 'ok' });
     }
@@ -78,6 +89,10 @@ exports.remove = async (req, res, next) => {
     const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS n FROM admins');
     if (countRows[0].n <= 1) {
       return res.status(400).json({ message: 'Impossible de supprimer le dernier compte admin' });
+    }
+    const { rows: targetRows } = await pool.query('SELECT zone FROM admins WHERE id = $1', [req.params.id]);
+    if (!targetRows.length || !visibleTo(targetRows[0], req.admin)) {
+      return res.status(404).json({ message: 'Admin introuvable' });
     }
     const { rowCount } = await pool.query('DELETE FROM admins WHERE id = $1', [req.params.id]);
     if (!rowCount) return res.status(404).json({ message: 'Admin introuvable' });

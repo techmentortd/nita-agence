@@ -1,8 +1,9 @@
 // Comptes admin de secours (sans DATABASE_URL) — identifiants de
 // développement uniquement. Utilisateur par défaut : admin / nita2026
 // À changer avant toute mise en production (voir npm run seed:admin).
-// zone: null = super-admin (accès à toutes les zones) ; les admins créés
-// depuis le panneau sont toujours rattachés à une zone (chef de zone).
+// zone: null = super-admin (accès à toutes les zones, invisible pour les
+// autres admins) ; les admins créés depuis le panneau sont toujours
+// rattachés à une zone (chef d'agence).
 module.exports = [
   {
     id: 1,

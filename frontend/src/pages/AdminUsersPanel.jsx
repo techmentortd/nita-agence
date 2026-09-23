@@ -78,7 +78,7 @@ export default function AdminUsersPanel() {
               />
             </div>
             <div>
-              <label htmlFor="new-admin-zone">Zone (le nouvel admin en devient le chef)</label>
+              <label htmlFor="new-admin-zone">Zone (le nouvel admin en devient le chef d'agence)</label>
               <select
                 id="new-admin-zone"
                 value={form.zone}
