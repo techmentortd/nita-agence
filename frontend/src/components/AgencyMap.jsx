@@ -11,6 +11,7 @@ import { fetchAgences } from '../services/services';
 import { fmtDist } from '../utils/utils';
 import { saveAgences, getAllAgences } from '../lib/db';
 import { downloadOfflineMap, getOfflineMapCacheInfo, estimateTileCount } from '../lib/offlineMap';
+import { useThemeLang } from '../context/ThemeLangContext';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -24,6 +25,7 @@ const ORANGE = '#f2701e';
 const BLUE = '#143b8f';
 
 export default function AgencyMap() {
+  const { t } = useThemeLang();
   const [searchParams] = useSearchParams();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -343,7 +345,7 @@ export default function AgencyMap() {
             </svg>
             <input
               type="text"
-              placeholder="Rechercher une agence, un quartier…"
+              placeholder={t('map_search_ph')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 30px', border: '1px solid #e5e9f0', borderRadius: 10, fontSize: 13, background: '#f8f9fb', color: '#142244', outline: 'none', fontFamily: 'inherit' }}
@@ -351,9 +353,9 @@ export default function AgencyMap() {
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {[
-              { val: 'all', label: 'Toutes', Icon: LayoutGrid },
-              { val: 'principale', label: 'Principales', Icon: Star },
-              { val: 'standard', label: 'Standard', Icon: Building2 },
+              { val: 'all', label: t('map_filter_all'), Icon: LayoutGrid },
+              { val: 'principale', label: t('map_filter_principale'), Icon: Star },
+              { val: 'standard', label: t('map_filter_standard'), Icon: Building2 },
             ].map(({ val, label, Icon }) => (
               <button
                 key={val}
@@ -381,7 +383,7 @@ export default function AgencyMap() {
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             {[
-              { val: 'all', label: 'Dist.' },
+              { val: 'all', label: t('map_dist_label') },
               { val: '2', label: '2 km' },
               { val: '5', label: '5 km' },
               { val: '10', label: '10 km' },
@@ -413,15 +415,15 @@ export default function AgencyMap() {
         </div>
 
         <div style={{ padding: '8px 14px', borderBottom: '1px solid #e5e9f0', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: '#4b5872', fontWeight: 600 }}>{filtered.length} agence(s)</span>
+          <span style={{ fontSize: 12, color: '#4b5872', fontWeight: 600 }}>{t('map_agence_count').replace('{n}', filtered.length)}</span>
           <span style={{ fontSize: 11, color: geoOk && !geoFar ? '#16a34a' : '#4b5872', display: 'flex', alignItems: 'center', gap: 3 }}>
-            <MapPin size={11} /> {geoOk && !geoFar ? 'Localisé' : "N'Djamena"}
+            <MapPin size={11} /> {geoOk && !geoFar ? t('map_located') : t('map_ndjamena')}
           </span>
         </div>
 
         {offlineData && (
           <div style={{ padding: '8px 14px', background: '#fff7ed', borderBottom: '1px solid #e5e9f0', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#c2410c' }}>
-            <WifiOff size={12} /> Données hors ligne (dernière synchro)
+            <WifiOff size={12} /> {t('map_offline_data')}
           </div>
         )}
 
@@ -429,7 +431,7 @@ export default function AgencyMap() {
           {dlState === 'downloading' ? (
             <div>
               <div style={{ fontSize: 11, color: '#4b5872', fontWeight: 700, marginBottom: 5 }}>
-                Téléchargement de la carte… {dlProgress.done}/{dlProgress.total}
+                {t('map_dl_downloading')} {dlProgress.done}/{dlProgress.total}
               </div>
               <div style={{ height: 6, background: '#eef1f6', borderRadius: 4, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${dlProgress.total ? (dlProgress.done / dlProgress.total) * 100 : 0}%`, background: ORANGE, transition: 'width .2s' }} />
@@ -449,19 +451,19 @@ export default function AgencyMap() {
             >
               {dlState === 'done' ? <Check size={13} /> : <Download size={13} />}
               {dlState === 'done'
-                ? `Carte disponible hors ligne (${tileCache.cached} tuiles)`
+                ? t('map_dl_available').replace('{n}', tileCache.cached)
                 : dlState === 'error'
-                ? 'Échec — réessayer'
-                : "Télécharger la carte hors ligne"}
+                ? t('map_dl_retry')
+                : t('map_dl_download')}
             </button>
           )}
         </div>
 
         <div className="map-sidebar-panel" style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {loading ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#4b5872', fontSize: 13 }}>Chargement…</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#4b5872', fontSize: 13 }}>{t('map_loading')}</div>
           ) : !filtered.length ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#4b5872', fontSize: 13 }}>Aucune agence trouvée</div>
+            <div style={{ padding: 24, textAlign: 'center', color: '#4b5872', fontSize: 13 }}>{t('map_none_found')}</div>
           ) : (
             filtered.map((a, idx) => (
               <div
@@ -500,7 +502,7 @@ export default function AgencyMap() {
                         color: a.type === 'principale' ? ORANGE : BLUE,
                       }}
                     >
-                      {a.type === 'principale' ? 'Principale' : 'Standard'}
+                      {a.type === 'principale' ? t('map_badge_principale') : t('map_badge_standard')}
                     </span>
                   </div>
                   {a.adresse && <div style={{ fontSize: 11, color: '#8a93a6', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.adresse}</div>}
@@ -513,7 +515,7 @@ export default function AgencyMap() {
                       style={{ padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 7, background: ORANGE, color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                     >
                       <Navigation size={10} />
-                      Itinéraire
+                      {t('map_itinerary')}
                     </button>
                     {a.telephone && (
                       <a
@@ -522,7 +524,7 @@ export default function AgencyMap() {
                         style={{ padding: '4px 8px', fontSize: 11, fontWeight: 700, borderRadius: 7, background: '#f8f9fb', color: '#142244', border: '1px solid #e5e9f0', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
                         <Phone size={10} />
-                        Appeler
+                        {t('map_call')}
                       </a>
                     )}
                   </div>
@@ -536,8 +538,8 @@ export default function AgencyMap() {
       {!isMobile && (
         <button
           onClick={() => setPanelOpen((v) => !v)}
-          aria-label={panelOpen ? 'Masquer filtres' : 'Afficher filtres'}
-          title={panelOpen ? 'Masquer filtres' : 'Afficher filtres'}
+          aria-label={panelOpen ? t('map_hide_filters') : t('map_show_filters')}
+          title={panelOpen ? t('map_hide_filters') : t('map_show_filters')}
           style={{
             position: 'absolute',
             left: panelOpen ? 300 : 0,
@@ -568,7 +570,7 @@ export default function AgencyMap() {
       {isMobile && (
         <button
           onClick={() => setSheetOpen((v) => !v)}
-          aria-label={sheetOpen ? 'Masquer le panneau' : 'Afficher le panneau'}
+          aria-label={sheetOpen ? t('map_hide_panel') : t('map_show_panel')}
           style={{
             position: 'absolute',
             bottom: sheetOpen ? SHEET_H + 12 : 16,
@@ -623,16 +625,16 @@ export default function AgencyMap() {
               <div style={{ fontWeight: 800, fontSize: 14, color: '#142244' }}>{selected.nom}</div>
               <div style={{ fontSize: 12, color: '#8a93a6', marginTop: 2 }}>{selected.adresse}</div>
               <div style={{ fontSize: 12, fontWeight: 700, color: ORANGE, marginTop: 2 }}>
-                {selected.type === 'principale' ? 'Agence principale' : 'Agence standard'} {selected.distance_km != null && `· ${fmtDist(selected.distance_km)}`}
+                {selected.type === 'principale' ? t('home_type_principale') : t('home_type_standard')} {selected.distance_km != null && `· ${fmtDist(selected.distance_km)}`}
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
               <button onClick={() => drawRoute(selected)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, background: ORANGE, color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer' }}>
-                Itinéraire
+                {t('map_itinerary')}
               </button>
               {selected.telephone && (
                 <a href={`tel:${selected.telephone}`} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, background: '#f8f9fb', color: '#142244', border: '1px solid #e5e9f0', borderRadius: 9, textDecoration: 'none', textAlign: 'center' }}>
-                  Appeler
+                  {t('map_call')}
                 </a>
               )}
             </div>
@@ -672,7 +674,7 @@ export default function AgencyMap() {
             justifyContent: 'center',
             transition: 'bottom .4s cubic-bezier(0.32, 0.72, 0, 1)',
           }}
-          title="Me localiser"
+          title={t('map_locate_me')}
         >
           <LocateFixed size={18} color={geoOk ? ORANGE : '#4b5872'} />
         </button>

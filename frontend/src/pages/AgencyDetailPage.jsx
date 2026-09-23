@@ -12,12 +12,14 @@ import { ArrowLeft, MapPin, Phone, Clock, Building2, Navigation, Star, ShieldChe
 import { useGeoPosition } from '../hooks/useGeoPosition';
 import { fetchAgenceById, fetchAgences } from '../services/services';
 import { fmtDist } from '../utils/utils';
+import { useThemeLang } from '../context/ThemeLangContext';
+import { serviceLabel, horairesLabel } from '../i18n/translations';
 import ZoneBadge from '../components/ZoneBadge';
 
-function whatsappLink(telephone, nom) {
+function whatsappLink(telephone, nom, template) {
   const digits = (telephone || '').replace(/\D/g, '');
   if (!digits) return null;
-  const text = encodeURIComponent(`Bonjour, je voudrais des informations sur l'agence NITA ${nom || ''}.`.trim());
+  const text = encodeURIComponent(template.split('%NOM%').join(nom || '').trim());
   return `https://wa.me/${digits}?text=${text}`;
 }
 
@@ -28,6 +30,7 @@ export function AgencyDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const coords = useGeoPosition();
+  const { t, lang } = useThemeLang();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
 
@@ -44,7 +47,7 @@ export function AgencyDetailPage() {
 
   const distance = scored?.find((a) => String(a.id) === String(id))?.distance_km;
   const isPrincipale = agence?.type === 'principale';
-  const waLink = agence ? whatsappLink(agence.telephone, agence.nom) : null;
+  const waLink = agence ? whatsappLink(agence.telephone, agence.nom, t('whatsapp_message')) : null;
 
   useEffect(() => {
     if (!agence || !mapContainerRef.current) return;
@@ -89,8 +92,8 @@ export function AgencyDetailPage() {
   if (isError || !agence) {
     return (
       <section className="section" style={{ maxWidth: 760, textAlign: 'center' }}>
-        <p>Agence introuvable.</p>
-        <Link to="/" className="btn btn-blue">Retour à l'accueil</Link>
+        <p>{t('detail_not_found')}</p>
+        <Link to="/" className="btn btn-blue">{t('detail_back_home')}</Link>
       </section>
     );
   }
@@ -99,7 +102,7 @@ export function AgencyDetailPage() {
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
       {/* ══ En-tête sticky ══ */}
       <div className="adetail-stickybar">
-        <button onClick={() => navigate(-1)} className="adetail-back-btn" aria-label="Retour">
+        <button onClick={() => navigate(-1)} className="adetail-back-btn" aria-label={t('detail_back_home')}>
           <ArrowLeft size={17} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -118,11 +121,11 @@ export function AgencyDetailPage() {
 
         <div className="adetail-hero-badges">
           {agence.disponible === false && (
-            <span className="adetail-badge adetail-badge-danger">Indisponible</span>
+            <span className="adetail-badge adetail-badge-danger">{t('detail_status_unavailable')}</span>
           )}
           <span className="adetail-badge">
             {isPrincipale ? <Star size={11} /> : <Building2 size={11} />}
-            {isPrincipale ? 'Principale' : 'Standard'}
+            {isPrincipale ? t('detail_type_principale') : t('detail_type_standard')}
           </span>
           {agence.zone && <ZoneBadge zone={agence.zone} />}
         </div>
@@ -141,41 +144,41 @@ export function AgencyDetailPage() {
         <div className="adetail-actions-grid">
           {agence.telephone && (
             <a href={`tel:${agence.telephone}`} className="adetail-btn adetail-btn-primary">
-              <Phone size={14} /> Appeler
+              <Phone size={14} /> {t('detail_btn_call')}
             </a>
           )}
           {waLink && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="adetail-btn adetail-btn-whatsapp">
-              <MessageCircle size={14} /> WhatsApp
+              <MessageCircle size={14} /> {t('detail_btn_whatsapp')}
             </a>
           )}
           <button onClick={() => navigate(`/carte?agenceId=${agence.id}`)} className="adetail-btn adetail-btn-outline">
-            <Navigation size={14} /> Itinéraire
+            <Navigation size={14} /> {t('detail_btn_itinerary')}
           </button>
         </div>
 
         {distance != null && (
           <div className="adetail-distance">
-            <Navigation size={12} /> À {fmtDist(distance)} de votre position
+            <Navigation size={12} /> {fmtDist(distance)} {t('detail_distance_suffix')}
           </div>
         )}
 
         {/* Horaires */}
         <section className="adetail-section">
-          <h2><Clock size={14} /> Horaires</h2>
+          <h2><Clock size={14} /> {t('detail_hours_title')}</h2>
           <div className="adetail-card-row">
-            <span>Tous les jours</span>
-            <span className="adetail-hours-value">{agence.horaires || '—'}</span>
+            <span>{t('detail_hours_everyday')}</span>
+            <span className="adetail-hours-value">{agence.horaires ? horairesLabel(agence.horaires, lang) : '—'}</span>
           </div>
         </section>
 
         {/* Services */}
         {!!agence.services?.length && (
           <section className="adetail-section">
-            <h2><Building2 size={14} /> Services</h2>
+            <h2><Building2 size={14} /> {t('detail_services_title')}</h2>
             <div className="detail-services">
               {agence.services.map((s) => (
-                <span key={s}>{s}</span>
+                <span key={s}>{serviceLabel(s, lang)}</span>
               ))}
             </div>
           </section>
@@ -183,7 +186,7 @@ export function AgencyDetailPage() {
 
         {/* Localisation */}
         <section className="adetail-section">
-          <h2><MapPin size={14} /> Localisation</h2>
+          <h2><MapPin size={14} /> {t('detail_location_title')}</h2>
           <div className="adetail-map-box">
             <div ref={mapContainerRef} className="adetail-map" />
           </div>
