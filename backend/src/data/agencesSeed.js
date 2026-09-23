@@ -10,7 +10,7 @@
 // (voir backend/scripts/generate-seed-sql.js).
 const { zoneForQuartier } = require('./zones');
 
-const SERVICES = ['Dépôt', 'Retrait', 'Transfert national'];
+const SERVICES = ['Dépôt', 'Retrait', 'Transfert national', 'Transfert international', 'Recharge MyNITA'];
 const HORAIRES = '7h-23h, tous les jours';
 const TEL = '+235 97 78 78 78';
 

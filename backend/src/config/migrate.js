@@ -18,7 +18,7 @@ async function migrate() {
       );
     `);
 
-    const migrations = ['001_create_agences.sql', '002_create_admins.sql', '003_add_disponible.sql', '004_add_zone.sql', '005_zone_numeric.sql'];
+    const migrations = ['001_create_agences.sql', '002_create_admins.sql', '003_add_disponible.sql', '004_add_zone.sql', '005_zone_numeric.sql', '006_add_services.sql'];
     const migrationsDir = path.join(__dirname, '../../migrations');
 
     for (const name of migrations) {

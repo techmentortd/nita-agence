@@ -3,7 +3,7 @@ import { LocateFixed } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ZONES } from '../utils/zones';
 
-const EMPTY = { nom: '', type: 'standard', quartier: '', zone: '', adresse: '', telephone: '', latitude: '', longitude: '', horaires: '7h-23h, tous les jours', services: 'Dépôt, Retrait, Transfert national' };
+const EMPTY = { nom: '', type: 'standard', quartier: '', zone: '', adresse: '', telephone: '', latitude: '', longitude: '', horaires: '7h-23h, tous les jours', services: 'Dépôt, Retrait, Transfert national, Transfert international, Recharge MyNITA' };
 
 export default function AdminAgencyForm({ initial, onCancel, onSubmit, saving }) {
   const { zone: adminZone } = useAuth();
