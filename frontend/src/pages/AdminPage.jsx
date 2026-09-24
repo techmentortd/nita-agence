@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, LogOut, Building2, CheckCircle2, XCircle, MapPinned } from 'lucide-react';
+import { Plus, Pencil, Trash2, LogOut, Building2, CheckCircle2, XCircle, MapPinned, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchAgences, createAgence, updateAgence, deleteAgence, toggleAgenceDisponible } from '../services/services';
 import { ZONES } from '../utils/zones';
@@ -16,6 +16,7 @@ export function AdminPage() {
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {...} = edit
   const [error, setError] = useState('');
   const [zoneFilter, setZoneFilter] = useState(adminZone || 'all');
+  const [search, setSearch] = useState('');
 
   const { data: agences = [], isLoading } = useQuery({
     queryKey: ['admin-agences'],
@@ -27,10 +28,17 @@ export function AdminPage() {
     () => (adminZone ? agences.filter((a) => a.zone === adminZone) : agences),
     [agences, adminZone]
   );
-  const visible = useMemo(
+  const byZone = useMemo(
     () => (zoneFilter === 'all' ? scoped : scoped.filter((a) => a.zone === zoneFilter)),
     [scoped, zoneFilter]
   );
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return byZone;
+    return byZone.filter(
+      (a) => a.nom.toLowerCase().includes(q) || (a.quartier || '').toLowerCase().includes(q)
+    );
+  }, [byZone, search]);
   const stats = useMemo(() => ({
     total: scoped.length,
     disponibles: scoped.filter((a) => a.disponible !== false).length,
@@ -125,6 +133,16 @@ export function AdminPage() {
       </div>
 
       {error && <div className="login-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <div className="admin-search-input">
+        <Search size={15} color="#8a93a6" />
+        <input
+          type="text"
+          placeholder="Rechercher une agence (nom, quartier)…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
       {editing && (
         <Modal title={editing.id ? "Modifier l'agence" : 'Nouvelle agence'} onClose={() => { setEditing(null); setError(''); }}>

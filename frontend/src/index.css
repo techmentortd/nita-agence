@@ -1276,6 +1276,27 @@ button { font-family: inherit; }
 .admin-stat-n { font-size: 19px; font-weight: 900; color: var(--t1); line-height: 1.1; }
 .admin-stat-l { font-size: 11px; color: var(--t3); font-weight: 700; margin-top: 2px; }
 
+.admin-search-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+}
+.admin-search-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  background: transparent;
+  color: var(--t1);
+}
+.admin-search-input input::placeholder { color: var(--t3); }
+
 .admin-zone-tabs {
   display: flex;
   flex-wrap: wrap;

@@ -67,6 +67,7 @@ export default function AgencyMap() {
   const [following, setFollowing] = useState(false);
   const [hasRoute, setHasRoute] = useState(false);
   const hasCenteredRef = useRef(false);
+  const downloadingRef = useRef(false);
   const lastListScrollRef = useRef(0);
 
   // Rend la nav flottante en quittant la page — elle ne doit rester masquée
@@ -350,16 +351,44 @@ export default function AgencyMap() {
   };
 
   const handleDownloadOfflineMap = async () => {
+    if (downloadingRef.current) return;
+    downloadingRef.current = true;
     setDlState('downloading');
     setDlProgress({ done: 0, total: estimateDownloadUnits() });
     try {
-      await downloadOfflineMap((done, total) => setDlProgress({ done, total }));
-      setDlState('done');
-      getOfflineMapCacheInfo().then(setTileCache);
+      const result = await downloadOfflineMap((done, total) => setDlProgress({ done, total }));
+      // On ne confirme "disponible hors ligne" que si les tuiles sont
+      // effectivement présentes dans le cache — un fetch réseau réussi ne
+      // suffit pas, encore faut-il que le service worker les y ait
+      // stockées. C'est la seule vraie garantie qu'elles seront utilisables
+      // hors connexion par la suite.
+      const info = await getOfflineMapCacheInfo();
+      setTileCache(info);
+      setDlState(result.success > 0 && info.cached > 0 ? 'done' : 'error');
     } catch {
       setDlState('error');
+    } finally {
+      downloadingRef.current = false;
     }
   };
+
+  /* ── Téléchargement automatique dès la première connexion ──
+     Pas besoin d'appuyer sur le bouton : dès que la carte a du réseau et
+     que rien n'est encore en cache, le téléchargement (tuiles + graphe de
+     routage) démarre tout seul, avec la même barre de progression. Si le
+     premier essai échoue faute de réseau, on réessaie automatiquement dès
+     que la connexion revient (événement "online"). */
+  useEffect(() => {
+    const tryAutoDownload = async () => {
+      if (downloadingRef.current) return;
+      const info = await getOfflineMapCacheInfo();
+      if (!info.cached) handleDownloadOfflineMap();
+    };
+    if (!loading) tryAutoDownload();
+    window.addEventListener('online', tryAutoDownload);
+    return () => window.removeEventListener('online', tryAutoDownload);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const filtered = getFiltered();
 
