@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { LocateFixed, ChevronUp, LayoutGrid, Building2, Navigation, MapPin, Star, Phone, Download, Check, WifiOff } from 'lucide-react';
+import { LocateFixed, ChevronUp, ChevronDown, SlidersHorizontal, LayoutGrid, Building2, Navigation, MapPin, Star, Phone, Download, Check, WifiOff } from 'lucide-react';
 import { fetchAgences } from '../services/services';
 import { fmtDist } from '../utils/utils';
 import { saveAgences, getAllAgences } from '../lib/db';
-import { downloadOfflineMap, getOfflineMapCacheInfo, estimateTileCount } from '../lib/offlineMap';
+import { downloadOfflineMap, getOfflineMapCacheInfo, estimateDownloadUnits } from '../lib/offlineMap';
+import { computeOfflineRoute } from '../lib/offlineRouter';
 import { useThemeLang } from '../context/ThemeLangContext';
+import { useNavVisibility } from '../context/NavVisibilityContext';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -23,9 +25,18 @@ L.Icon.Default.mergeOptions({
 const NDJAMENA = { lat: 12.1348, lng: 15.0557 };
 const ORANGE = '#f2701e';
 const BLUE = '#143b8f';
+// Hauteur réservée en bas de l'écran mobile pour la nav flottante globale
+// (voir components/MobileBottomNav.jsx) — évite que la feuille du bas, ses
+// boutons flottants (localisation, replier) ou le panneau d'agence
+// sélectionnée ne se retrouvent masqués derrière elle. Réduite à presque
+// rien quand la nav se masque (voir NavVisibilityContext) pour rendre cet
+// espace à la liste d'agences.
+const BOTTOM_NAV_SPACE = 108;
+const BOTTOM_NAV_SPACE_HIDDEN = 10;
 
 export default function AgencyMap() {
   const { t } = useThemeLang();
+  const { hidden: navHidden, setHidden: setNavHidden } = useNavVisibility();
   const [searchParams] = useSearchParams();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -46,11 +57,39 @@ export default function AgencyMap() {
   const [geoFar, setGeoFar] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(true);
+  const [sheetTall, setSheetTall] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [offlineData, setOfflineData] = useState(false);
   const [dlState, setDlState] = useState('idle'); // idle | downloading | done | error
   const [dlProgress, setDlProgress] = useState({ done: 0, total: 0 });
   const [tileCache, setTileCache] = useState({ cached: 0 });
+  const [following, setFollowing] = useState(false);
+  const [hasRoute, setHasRoute] = useState(false);
+  const hasCenteredRef = useRef(false);
+  const lastListScrollRef = useRef(0);
+
+  // Rend la nav flottante en quittant la page — elle ne doit rester masquée
+  // que pendant le défilement de la liste d'agences.
+  useEffect(() => () => setNavHidden(false), [setNavHidden]);
+
+  // Leaflet ne redimensionne pas tout seul son canvas quand le conteneur
+  // change de taille (ex. la carte grandit quand la nav se masque) — sans
+  // ça, des bandes grises apparaissent tant qu'on n'interagit pas avec elle.
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const timer = setTimeout(() => mapRef.current?.invalidateSize(), 320);
+    return () => clearTimeout(timer);
+  }, [navHidden]);
+
+  const handleListScroll = (e) => {
+    const st = e.target.scrollTop;
+    const last = lastListScrollRef.current;
+    if (st <= 4) setNavHidden(false);
+    else if (st > last + 4) setNavHidden(true);
+    else if (st < last - 4) setNavHidden(false);
+    lastListScrollRef.current = st;
+  };
 
   useEffect(() => {
     getOfflineMapCacheInfo().then(setTileCache);
@@ -98,10 +137,16 @@ export default function AgencyMap() {
       });
   }, [geoOk]);
 
-  /* ── Géolocalisation ── */
+  /* ── Géolocalisation en continu ──
+     watchPosition (plutôt qu'un relevé unique) pour pouvoir suivre le
+     déplacement de l'utilisateur en direct le long de l'itinéraire — ça ne
+     nécessite aucune connexion réseau, le GPS de l'appareil fonctionne hors
+     ligne. On ne recentre automatiquement la carte qu'une seule fois au
+     premier relevé ; ensuite le recentrage suit le mode "following" activé
+     manuellement pendant la navigation (voir bouton de suivi). */
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
@@ -115,16 +160,38 @@ export default function AgencyMap() {
         if (distFromNdj <= 100) {
           setRefLocation(loc);
           setGeoFar(false);
-          if (mapRef.current) mapRef.current.setView([loc.lat, loc.lng], 14);
+          if (!hasCenteredRef.current && mapRef.current) {
+            mapRef.current.setView([loc.lat, loc.lng], 14);
+            hasCenteredRef.current = true;
+          }
         } else {
           setRefLocation({ ...NDJAMENA });
           setGeoFar(true);
         }
       },
       () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  /* ── Suivi en direct pendant la navigation ──
+     Tant que le mode suivi est actif, la carte recentre sur la position de
+     l'utilisateur à chaque nouveau relevé GPS — fonctionne hors ligne dès
+     que les tuiles de la zone ont été téléchargées au préalable. */
+  useEffect(() => {
+    if (following && mapRef.current) {
+      mapRef.current.panTo([userLocation.lat, userLocation.lng], { animate: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userLocation.lat, userLocation.lng]);
+
+  useEffect(() => {
+    if (!selected) {
+      setFollowing(false);
+      setHasRoute(false);
+    }
+  }, [selected]);
 
   /* ── Init carte ── */
   useEffect(() => {
@@ -220,6 +287,10 @@ export default function AgencyMap() {
 
   const drawRoute = async (a) => {
     if (!mapRef.current || !userLocation) return;
+    // Dessiner un itinéraire = démarrer la navigation : on active le suivi
+    // en direct, qui continuera à fonctionner hors ligne via le GPS.
+    setHasRoute(true);
+    setFollowing(true);
     if (routingRef.current) {
       routingRef.current.forEach((l) => mapRef.current.removeLayer(l));
       routingRef.current = null;
@@ -229,14 +300,33 @@ export default function AgencyMap() {
     const layers = [];
     try {
       const url = `https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${a.longitude},${a.latitude}?overview=full&geometries=geojson`;
-      const res = await fetch(url);
-      const json = await res.json();
+      // Hors ligne, le fetch peut mettre longtemps à échouer sans timeout
+      // explicite — on abandonne vite pour basculer sur la ligne droite.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      let json;
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        json = await res.json();
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (json.routes?.length) {
         const coords = json.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
         layers.push(L.polyline(coords, { color: ORANGE, weight: 5, opacity: 0.9 }).addTo(mapRef.current));
       } else throw new Error('no route');
     } catch {
-      layers.push(L.polyline([from, to], { color: ORANGE, weight: 5, opacity: 0.85, dashArray: '10, 8' }).addTo(mapRef.current));
+      // OSRM indisponible (hors ligne ou timeout) — on tente le routage
+      // local sur le graphe routier de N'Djamena pré-téléchargé (voir
+      // lib/offlineRouter.js), qui suit les vraies routes sans réseau.
+      const offline = await computeOfflineRoute(userLocation.lat, userLocation.lng, a.latitude, a.longitude);
+      if (offline) {
+        layers.push(L.polyline(offline.coords, { color: ORANGE, weight: 5, opacity: 0.9 }).addTo(mapRef.current));
+      } else {
+        // Dernier recours : ligne droite en pointillés (graphe non
+        // téléchargé ou point hors de la zone couverte).
+        layers.push(L.polyline([from, to], { color: ORANGE, weight: 5, opacity: 0.85, dashArray: '10, 8' }).addTo(mapRef.current));
+      }
     }
     layers.push(
       L.marker(to, {
@@ -261,7 +351,7 @@ export default function AgencyMap() {
 
   const handleDownloadOfflineMap = async () => {
     setDlState('downloading');
-    setDlProgress({ done: 0, total: estimateTileCount() });
+    setDlProgress({ done: 0, total: estimateDownloadUnits() });
     try {
       await downloadOfflineMap((done, total) => setDlProgress({ done, total }));
       setDlState('done');
@@ -273,17 +363,20 @@ export default function AgencyMap() {
 
   const filtered = getFiltered();
 
-  const SHEET_H = 340;
+  const SHEET_H = isMobile && sheetTall ? Math.round(window.innerHeight * 0.82) : 340;
+  const activeFilterCount = (typeFilter !== 'all' ? 1 : 0) + (distFilter !== 'all' ? 1 : 0);
 
   return (
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        top: isMobile ? 62 : 62,
+        top: 62,
+        bottom: isMobile ? (navHidden ? BOTTOM_NAV_SPACE_HIDDEN : BOTTOM_NAV_SPACE) : 0,
         display: 'flex',
         background: '#eef1f6',
         overflow: 'hidden',
+        transition: isMobile ? 'bottom .28s cubic-bezier(0.4, 0, 0.2, 1)' : undefined,
       }}
     >
       <style>{`
@@ -332,8 +425,13 @@ export default function AgencyMap() {
         }
       >
         {isMobile && (
-          <div onClick={() => setSheetOpen((v) => !v)} style={{ padding: '10px 0 4px', display: 'flex', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          <div
+            onClick={() => setSheetTall((v) => !v)}
+            title={t('map_expand_hint')}
+            style={{ padding: '10px 0 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer', flexShrink: 0 }}
+          >
             <div style={{ width: 36, height: 4, background: '#e2e8f0', borderRadius: 2 }} />
+            {sheetTall ? <ChevronDown size={13} color="#c4cad6" /> : <ChevronUp size={13} color="#c4cad6" />}
           </div>
         )}
 
@@ -351,67 +449,90 @@ export default function AgencyMap() {
               style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 30px', border: '1px solid #e5e9f0', borderRadius: 10, fontSize: 13, background: '#f8f9fb', color: '#142244', outline: 'none', fontFamily: 'inherit' }}
             />
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[
-              { val: 'all', label: t('map_filter_all'), Icon: LayoutGrid },
-              { val: 'principale', label: t('map_filter_principale'), Icon: Star },
-              { val: 'standard', label: t('map_filter_standard'), Icon: Building2 },
-            ].map(({ val, label, Icon }) => (
-              <button
-                key={val}
-                onClick={() => setTypeFilter(val)}
-                style={{
-                  flex: 1,
-                  padding: '5px 4px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  border: `1px solid ${typeFilter === val ? ORANGE : '#e5e9f0'}`,
-                  background: typeFilter === val ? ORANGE : '#f8f9fb',
-                  color: typeFilter === val ? '#fff' : '#4b5872',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                }}
-              >
-                <Icon size={11} />
-                {label}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            {[
-              { val: 'all', label: t('map_dist_label') },
-              { val: '2', label: '2 km' },
-              { val: '5', label: '5 km' },
-              { val: '10', label: '10 km' },
-            ].map(({ val, label }) => (
-              <button
-                key={val}
-                onClick={() => setDistFilter(val)}
-                style={{
-                  flex: 1,
-                  padding: '5px 2px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  border: `1px solid ${distFilter === val ? BLUE : '#e5e9f0'}`,
-                  background: distFilter === val ? BLUE : '#f8f9fb',
-                  color: distFilter === val ? '#fff' : '#4b5872',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                }}
-              >
-                <Navigation size={10} />
-                {label}
-              </button>
-            ))}
-          </div>
+
+          {isMobile && (
+            <button
+              onClick={() => setFiltersOpen((v) => !v)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '6px 8px', fontSize: 11.5, fontWeight: 700, borderRadius: 8,
+                border: `1px solid ${activeFilterCount ? ORANGE : '#e5e9f0'}`,
+                background: activeFilterCount ? '#fff1e2' : '#f8f9fb',
+                color: activeFilterCount ? ORANGE : '#4b5872',
+                cursor: 'pointer',
+              }}
+            >
+              <SlidersHorizontal size={12} />
+              {t('map_filters')}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              {filtersOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+
+          {(!isMobile || filtersOpen) && (
+            <>
+              <div style={{ display: 'flex', gap: 6, marginTop: isMobile ? 8 : 0 }}>
+                {[
+                  { val: 'all', label: t('map_filter_all'), Icon: LayoutGrid },
+                  { val: 'principale', label: t('map_filter_principale'), Icon: Star },
+                  { val: 'standard', label: t('map_filter_standard'), Icon: Building2 },
+                ].map(({ val, label, Icon }) => (
+                  <button
+                    key={val}
+                    onClick={() => setTypeFilter(val)}
+                    style={{
+                      flex: 1,
+                      padding: '5px 4px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: 8,
+                      border: `1px solid ${typeFilter === val ? ORANGE : '#e5e9f0'}`,
+                      background: typeFilter === val ? ORANGE : '#f8f9fb',
+                      color: typeFilter === val ? '#fff' : '#4b5872',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 3,
+                    }}
+                  >
+                    <Icon size={11} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                {[
+                  { val: 'all', label: t('map_dist_label') },
+                  { val: '2', label: '2 km' },
+                  { val: '5', label: '5 km' },
+                  { val: '10', label: '10 km' },
+                ].map(({ val, label }) => (
+                  <button
+                    key={val}
+                    onClick={() => setDistFilter(val)}
+                    style={{
+                      flex: 1,
+                      padding: '5px 2px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: 8,
+                      border: `1px solid ${distFilter === val ? BLUE : '#e5e9f0'}`,
+                      background: distFilter === val ? BLUE : '#f8f9fb',
+                      color: distFilter === val ? '#fff' : '#4b5872',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 3,
+                    }}
+                  >
+                    <Navigation size={10} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div style={{ padding: '8px 14px', borderBottom: '1px solid #e5e9f0', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -459,7 +580,7 @@ export default function AgencyMap() {
           )}
         </div>
 
-        <div className="map-sidebar-panel" style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        <div className="map-sidebar-panel" onScroll={isMobile ? handleListScroll : undefined} style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {loading ? (
             <div style={{ padding: 24, textAlign: 'center', color: '#4b5872', fontSize: 13 }}>{t('map_loading')}</div>
           ) : !filtered.length ? (
@@ -632,6 +753,21 @@ export default function AgencyMap() {
               <button onClick={() => drawRoute(selected)} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, background: ORANGE, color: '#fff', border: 'none', borderRadius: 9, cursor: 'pointer' }}>
                 {t('map_itinerary')}
               </button>
+              {hasRoute && (
+                <button
+                  onClick={() => setFollowing((v) => !v)}
+                  style={{
+                    padding: '6px 12px', fontSize: 11, fontWeight: 700, borderRadius: 9, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    background: following ? '#ecfdf5' : '#f8f9fb',
+                    color: following ? '#16a34a' : '#142244',
+                    border: `1px solid ${following ? '#bbf7d0' : '#e5e9f0'}`,
+                  }}
+                >
+                  {following && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />}
+                  {following ? t('map_following_on') : t('map_following_off')}
+                </button>
+              )}
               {selected.telephone && (
                 <a href={`tel:${selected.telephone}`} style={{ padding: '6px 12px', fontSize: 12, fontWeight: 700, background: '#f8f9fb', color: '#142244', border: '1px solid #e5e9f0', borderRadius: 9, textDecoration: 'none', textAlign: 'center' }}>
                   {t('map_call')}
@@ -641,6 +777,8 @@ export default function AgencyMap() {
             <button
               onClick={() => {
                 setSelected(null);
+                setFollowing(false);
+                setHasRoute(false);
                 if (routingRef.current) {
                   routingRef.current.forEach((l) => mapRef.current?.removeLayer(l));
                   routingRef.current = null;

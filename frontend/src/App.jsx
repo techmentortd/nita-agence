@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import MobileBottomNav from './components/MobileBottomNav';
 import HomePage from './pages/HomePage';
 import AgencyMap from './components/AgencyMap';
 import CalculatorPage from './pages/CalculatorPage';
@@ -19,6 +20,7 @@ function Layout({ children, noFooter }) {
       {children}
       {!noFooter && <Footer />}
       <InstallPrompt />
+      <MobileBottomNav />
     </div>
   );
 }

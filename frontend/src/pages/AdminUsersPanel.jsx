@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, Trash2, ShieldCheck } from 'lucide-react';
+import { UserPlus, Trash2, Pencil, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchAdmins, createAdmin, deleteAdmin } from '../services/services';
+import { fetchAdmins, createAdmin, updateAdmin, deleteAdmin } from '../services/services';
 import { ZONES } from '../utils/zones';
 import ZoneBadge from '../components/ZoneBadge';
+
+const EMPTY = { username: '', password: '', zone: '' };
 
 export default function AdminUsersPanel() {
   const { username: myUsername } = useAuth();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ username: '', password: '', zone: '' });
+  const [editing, setEditing] = useState(null); // null = closed, {} = new, {...} = edit
+  const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
-  const [open, setOpen] = useState(false);
 
   const { data: admins = [], isLoading } = useQuery({
     queryKey: ['admins'],
@@ -20,10 +22,33 @@ export default function AdminUsersPanel() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admins'] });
 
+  const openNew = () => {
+    setForm(EMPTY);
+    setError('');
+    setEditing({});
+  };
+
+  const openEdit = (a) => {
+    setForm({ username: a.username, password: '', zone: a.zone || '' });
+    setError('');
+    setEditing(a);
+  };
+
+  const closeForm = () => {
+    setEditing(null);
+    setError('');
+  };
+
   const createMut = useMutation({
     mutationFn: createAdmin,
-    onSuccess: () => { invalidate(); setForm({ username: '', password: '', zone: '' }); setOpen(false); setError(''); },
+    onSuccess: () => { invalidate(); closeForm(); },
     onError: (e) => setError(e.response?.data?.message || 'Erreur lors de la création'),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, payload }) => updateAdmin(id, payload),
+    onSuccess: () => { invalidate(); closeForm(); },
+    onError: (e) => setError(e.response?.data?.message || 'Erreur lors de la modification'),
   });
 
   const deleteMut = useMutation({
@@ -35,7 +60,13 @@ export default function AdminUsersPanel() {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
-    createMut.mutate(form);
+    if (editing?.id) {
+      const payload = { username: form.username, zone: form.zone };
+      if (form.password) payload.password = form.password;
+      updateMut.mutate({ id: editing.id, payload });
+    } else {
+      createMut.mutate(form);
+    }
   };
 
   return (
@@ -43,44 +74,46 @@ export default function AdminUsersPanel() {
       <div className="admin-toolbar">
         <div>
           <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--t1)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ShieldCheck size={17} color="var(--orange)" /> Comptes administrateurs
+            <ShieldCheck size={17} color="var(--orange)" /> Chefs d'agence
           </h2>
-          <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Gérez qui peut accéder à cette console d'administration.</p>
+          <p style={{ fontSize: 12, color: 'var(--t3)', margin: '4px 0 0' }}>Gérez qui administre chaque zone.</p>
         </div>
-        <button className="btn btn-orange" onClick={() => setOpen((v) => !v)}>
-          <UserPlus size={14} /> Ajouter un admin
+        <button className="btn btn-orange" onClick={openNew}>
+          <UserPlus size={14} /> Ajouter un chef d'agence
         </button>
       </div>
 
       {error && <div className="login-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      {open && (
+      {editing && (
         <form className="admin-form" onSubmit={handleSubmit}>
           <div className="admin-form-grid">
             <div>
-              <label htmlFor="new-admin-username">Nom d'utilisateur</label>
+              <label htmlFor="admin-username">Nom d'utilisateur</label>
               <input
-                id="new-admin-username"
+                id="admin-username"
                 value={form.username}
                 onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                 required
               />
             </div>
             <div>
-              <label htmlFor="new-admin-password">Mot de passe (min. 6 caractères)</label>
+              <label htmlFor="admin-password">
+                {editing.id ? 'Nouveau mot de passe (laisser vide pour ne pas changer)' : 'Mot de passe (min. 6 caractères)'}
+              </label>
               <input
-                id="new-admin-password"
+                id="admin-password"
                 type="password"
                 minLength={6}
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                required
+                required={!editing.id}
               />
             </div>
             <div>
-              <label htmlFor="new-admin-zone">Zone (le nouvel admin en devient le chef d'agence)</label>
+              <label htmlFor="admin-zone">Zone (agence gérée)</label>
               <select
-                id="new-admin-zone"
+                id="admin-zone"
                 value={form.zone}
                 onChange={(e) => setForm((f) => ({ ...f, zone: e.target.value }))}
                 required
@@ -93,10 +126,10 @@ export default function AdminUsersPanel() {
             </div>
           </div>
           <div className="admin-form-actions">
-            <button type="submit" className="btn btn-orange" disabled={createMut.isPending}>
-              {createMut.isPending ? 'Création…' : "Créer l'admin"}
+            <button type="submit" className="btn btn-orange" disabled={createMut.isPending || updateMut.isPending}>
+              {createMut.isPending || updateMut.isPending ? 'Enregistrement…' : editing.id ? "Enregistrer les modifications" : "Créer l'admin"}
             </button>
-            <button type="button" className="btn btn-ghost" onClick={() => { setOpen(false); setError(''); }}>
+            <button type="button" className="btn btn-ghost" onClick={closeForm}>
               Annuler
             </button>
           </div>
@@ -126,8 +159,13 @@ export default function AdminUsersPanel() {
                   <td data-label="Zone"><ZoneBadge zone={a.zone} /></td>
                   <td data-label="Créé le">{a.created_at ? new Date(a.created_at).toLocaleDateString('fr-FR') : '—'}</td>
                   <td data-label="Actions" className="admin-table-actions-cell">
-                    {a.username !== myUsername && (
-                      <div className="row-actions">
+                    <div className="row-actions">
+                      {a.zone && (
+                        <button title="Modifier" onClick={() => openEdit(a)}>
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {a.username !== myUsername && (
                         <button
                           className="danger"
                           title="Supprimer"
@@ -137,8 +175,8 @@ export default function AdminUsersPanel() {
                         >
                           <Trash2 size={13} />
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { fetchAgences, createAgence, updateAgence, deleteAgence, toggleAgenceDisponible } from '../services/services';
 import { ZONES } from '../utils/zones';
 import ZoneBadge from '../components/ZoneBadge';
+import Modal from '../components/Modal';
 import AdminAgencyForm from './AdminAgencyForm';
 import AdminUsersPanel from './AdminUsersPanel';
+import AdminSelfAccountPanel from './AdminSelfAccountPanel';
 
 export function AdminPage() {
   const { username, zone: adminZone, logout } = useAuth();
@@ -125,12 +127,14 @@ export function AdminPage() {
       {error && <div className="login-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       {editing && (
-        <AdminAgencyForm
-          initial={editing.id ? editing : null}
-          saving={createMut.isPending || updateMut.isPending}
-          onCancel={() => { setEditing(null); setError(''); }}
-          onSubmit={handleSubmit}
-        />
+        <Modal title={editing.id ? "Modifier l'agence" : 'Nouvelle agence'} onClose={() => { setEditing(null); setError(''); }}>
+          <AdminAgencyForm
+            initial={editing.id ? editing : null}
+            saving={createMut.isPending || updateMut.isPending}
+            onCancel={() => { setEditing(null); setError(''); }}
+            onSubmit={handleSubmit}
+          />
+        </Modal>
       )}
 
       <div className="admin-table-wrap">
@@ -192,7 +196,8 @@ export function AdminPage() {
         </table>
       </div>
 
-      <AdminUsersPanel />
+      <AdminSelfAccountPanel />
+      {!adminZone && <AdminUsersPanel />}
     </section>
   );
 }

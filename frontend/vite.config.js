@@ -13,18 +13,29 @@ export default defineConfig({
       },
       includeAssets: ['logo.png', 'icon-192.png', 'icon-512.png'],
       manifest: {
+        id: '/',
         name: 'NITA Agences',
         short_name: 'NITA Agences',
         description: "Localisez les agences NITA à N'Djamena, même hors ligne.",
         theme_color: '#143b8f',
         background_color: '#ffffff',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
+        orientation: 'portrait-primary',
+        categories: ['finance', 'navigation', 'utilities'],
         start_url: '/',
         scope: '/',
         lang: 'fr',
+        dir: 'ltr',
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        shortcuts: [
+          { name: 'Carte des agences', url: '/carte', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
+          { name: 'Calculatrice de frais', url: '/calculatrice', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
         ],
       },
       workbox: {
@@ -32,6 +43,13 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         // Les tuiles OSM peuvent dépasser la limite par défaut de precache (2 Mo)
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Le service worker précédent est immédiatement remplacé et prend le
+        // contrôle sans attendre la fermeture des onglets ouverts — combiné à
+        // registerType: 'autoUpdate', l'app reste à jour sur toutes les
+        // versions d'Android/Chrome sans action de l'utilisateur.
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             // Données des agences — toujours essayer le réseau d'abord,
@@ -66,6 +84,18 @@ export default defineConfig({
               cacheName: 'osrm-routes',
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Graphe routier pour le calcul d'itinéraire hors ligne (voir
+            // lib/offlineRouter.js) — préchargé explicitement par le bouton
+            // "Télécharger la carte hors ligne" (lib/offlineMap.js).
+            urlPattern: /\/ndjamena-roads\.json$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ndjamena-roads',
+              expiration: { maxEntries: 1, maxAgeSeconds: 60 * 60 * 24 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

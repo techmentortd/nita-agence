@@ -49,6 +49,16 @@ export async function createAdmin(payload) {
   return data.data;
 }
 
+export async function updateAdmin(id, payload) {
+  const { data } = await api.put(`/admins/${id}`, payload);
+  return data.data;
+}
+
+export async function updateOwnAdminAccount(payload) {
+  const { data } = await api.put('/admins/me', payload);
+  return data.data;
+}
+
 export async function deleteAdmin(id) {
   await api.delete(`/admins/${id}`);
 }

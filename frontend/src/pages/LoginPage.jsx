@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, User, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useThemeLang } from '../context/ThemeLangContext';
+import nitaLogo from '../assets/nita-logo-mark.png';
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -33,6 +34,7 @@ export function LoginPage() {
       <div className="hero-orb o2" />
       <div className="hero-orb o3" />
       <div className="login-card">
+        <img src={nitaLogo} alt="NITA — Transfert d'argent" className="login-logo" />
         <p className="login-tagline">{t('tagline')}</p>
 
         <div className="login-badge">

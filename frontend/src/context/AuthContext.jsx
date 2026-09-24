@@ -19,6 +19,11 @@ export function AuthProvider({ children }) {
     setZone(data.zone || null);
   };
 
+  const updateUsername = (u) => {
+    localStorage.setItem('nita_admin_username', u);
+    setUsername(u);
+  };
+
   const logout = () => {
     localStorage.removeItem('nita_admin_token');
     localStorage.removeItem('nita_admin_username');
@@ -29,7 +34,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ token, username, zone, isAuthenticated: !!token, login, logout }}>
+    <AuthContext.Provider value={{ token, username, zone, isAuthenticated: !!token, login, logout, updateUsername }}>
       {children}
     </AuthContext.Provider>
   );

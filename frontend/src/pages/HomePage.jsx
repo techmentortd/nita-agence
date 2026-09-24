@@ -1,29 +1,58 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Search, MapPin, Navigation, Building2, Clock, Phone, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Search, MapPin, Navigation, Building2, Clock, Phone, ArrowRight, ArrowLeft, WifiOff } from 'lucide-react';
 import { useGeoPosition } from '../hooks/useGeoPosition';
 import { fetchAgences, fetchAgencesStats } from '../services/services';
-import { fmtDist } from '../utils/utils';
+import { fmtDist, haversineKm } from '../utils/utils';
 import { useThemeLang } from '../context/ThemeLangContext';
 import { horairesLabel } from '../i18n/translations';
+import { saveAgences, getAllAgences } from '../lib/db';
 
 export function HomePage() {
   const coords = useGeoPosition();
   const navigate = useNavigate();
   const { t, lang } = useThemeLang();
   const [search, setSearch] = useState('');
+  const [offlineData, setOfflineData] = useState(false);
   const SeeAllArrow = lang === 'ar' ? ArrowLeft : ArrowRight;
 
+  // Hors ligne : repli sur la copie IndexedDB (même logique que la carte,
+  // voir components/AgencyMap.jsx) — la distance est alors recalculée
+  // côté client pour que "l'agence la plus proche" reste juste sans réseau.
   const { data: agences = [], isLoading } = useQuery({
     queryKey: ['home-agences', coords?.lat, coords?.lng],
-    queryFn: () => fetchAgences({ lat: coords?.lat, lng: coords?.lng }),
+    queryFn: async () => {
+      try {
+        const rows = await fetchAgences({ lat: coords?.lat, lng: coords?.lng });
+        setOfflineData(false);
+        if (rows?.length) saveAgences(rows);
+        return rows;
+      } catch (err) {
+        const cached = await getAllAgences();
+        if (!cached.length) throw err;
+        setOfflineData(true);
+        if (coords?.lat) {
+          return cached
+            .map((a) => ({ ...a, distance_km: Math.round(haversineKm(coords.lat, coords.lng, a.latitude, a.longitude) * 100) / 100 }))
+            .sort((a, b) => a.distance_km - b.distance_km);
+        }
+        return cached;
+      }
+    },
     placeholderData: (prev) => prev,
   });
 
   const { data: stats = {} } = useQuery({
     queryKey: ['agences-stats'],
-    queryFn: fetchAgencesStats,
+    queryFn: async () => {
+      try {
+        return await fetchAgencesStats();
+      } catch {
+        const cached = await getAllAgences();
+        return { total_agences: cached.length };
+      }
+    },
     placeholderData: { total_agences: 0 },
   });
 
@@ -85,6 +114,12 @@ export function HomePage() {
       </section>
 
       <section className="section">
+        {offlineData && (
+          <div className="offline-banner">
+            <WifiOff size={13} /> {t('map_offline_data')}
+          </div>
+        )}
+
         <div className="section-title">
           <h2>{coords?.lat ? t('home_title_near') : t('home_title_all')}</h2>
           <a href="/carte" onClick={(e) => { e.preventDefault(); goToMap(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>

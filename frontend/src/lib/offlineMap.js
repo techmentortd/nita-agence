@@ -10,6 +10,8 @@
 // à grande échelle, il faut passer par un fournisseur payant (MapTiler,
 // Thunderforest, etc.) ou un serveur de tuiles auto-hébergé.
 
+import { prefetchRoutingGraph } from './offlineRouter';
+
 const NDJAMENA_BBOX = { south: 12.02, north: 12.18, west: 14.98, east: 15.14 };
 const ZOOM_LEVELS = [13, 14, 15];
 const TILE_SUBDOMAINS = ['a', 'b', 'c'];
@@ -46,17 +48,36 @@ export function estimateTileCount() {
   return ZOOM_LEVELS.reduce((sum, z) => sum + tileUrlsForBbox(NDJAMENA_BBOX, z).length, 0);
 }
 
+// Tuiles + le graphe de routage (1 unité) — total réel affiché par la barre
+// de progression du téléchargement hors ligne.
+export function estimateDownloadUnits() {
+  return estimateTileCount() + 1;
+}
+
 /**
- * Télécharge les tuiles de N'Djamena dans le cache du service worker.
+ * Télécharge les tuiles de N'Djamena + le graphe de routage dans le cache
+ * du service worker, pour que la carte ET les itinéraires fonctionnent
+ * sans connexion.
  * @param {(done: number, total: number) => void} onProgress
  * @returns {Promise<{ success: number, failed: number, total: number }>}
  */
 export async function downloadOfflineMap(onProgress) {
   const allUrls = ZOOM_LEVELS.flatMap((z) => tileUrlsForBbox(NDJAMENA_BBOX, z));
-  const total = allUrls.length;
+  const total = allUrls.length + 1;
   let done = 0;
   let success = 0;
   let failed = 0;
+
+  // Le graphe de routage en premier — même si le téléchargement des tuiles
+  // est interrompu ensuite, le routage hors ligne reste utilisable.
+  try {
+    await prefetchRoutingGraph();
+    success++;
+  } catch {
+    failed++;
+  }
+  done++;
+  onProgress?.(done, total);
 
   for (let i = 0; i < allUrls.length; i += BATCH_SIZE) {
     const batch = allUrls.slice(i, i + BATCH_SIZE);

@@ -3,6 +3,10 @@ import { TR } from '../i18n/translations';
 
 const ThemeLangContext = createContext(null);
 
+// Thème clair/sombre désactivé temporairement (retour au clair partout) —
+// remettre à true pour réactiver le sélecteur dans le header.
+const THEME_ENABLED = false;
+
 function detectLang() {
   const saved = localStorage.getItem('nita-lang');
   if (saved) return { lang: saved, auto: false };
@@ -20,6 +24,10 @@ export function ThemeLangProvider({ children }) {
   }, []);
 
   const applyTheme = useCallback((th) => {
+    if (!THEME_ENABLED) {
+      document.documentElement.setAttribute('data-theme', 'light');
+      return;
+    }
     const dark = th === 'dark' || (th === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
   }, []);
@@ -28,7 +36,7 @@ export function ThemeLangProvider({ children }) {
   useEffect(() => { applyTheme(theme); }, [theme, applyTheme]);
 
   useEffect(() => {
-    if (theme !== 'auto' || !window.matchMedia) return;
+    if (!THEME_ENABLED || theme !== 'auto' || !window.matchMedia) return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = () => applyTheme('auto');
     mq.addEventListener('change', onChange);
@@ -48,7 +56,7 @@ export function ThemeLangProvider({ children }) {
   const t = useCallback((key) => (TR[lang] || TR.fr)[key] ?? key, [lang]);
 
   return (
-    <ThemeLangContext.Provider value={{ lang, langAuto, setLang, theme, setTheme, t }}>
+    <ThemeLangContext.Provider value={{ lang, langAuto, setLang, theme, setTheme, themeEnabled: THEME_ENABLED, t }}>
       {children}
     </ThemeLangContext.Provider>
   );

@@ -90,12 +90,13 @@ button { font-family: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 10px 32px;
   background: var(--card);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 100;
+  gap: 20px;
 }
 
 .nita-logo {
@@ -103,6 +104,7 @@ button { font-family: inherit; }
   flex-direction: column;
   align-items: flex-start;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .nita-logo-img {
@@ -123,41 +125,113 @@ button { font-family: inherit; }
 .nita-nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+}
+
+/* Liens principaux regroupés dans un "rail" gris clair (comme un segmented
+   control) plutôt que de flotter en texte nu sur le header. Sur mobile ils
+   sont cachés au profit de MobileBottomNav (breakpoint plus bas).
+   Le bloc admin (nita-nav-admin) n'est volontairement PAS concerné par ce
+   traitement — laissé simple, sans rail ni animation, sur demande. */
+.nita-nav-primary {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  position: relative;
+}
+.nita-nav-admin { display: contents; }
+
+/* Pilule active qui glisse d'un onglet à l'autre — voir Header.jsx, qui
+   mesure et positionne cet élément via transform/width. */
+.nita-nav-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: var(--radius-pill);
+  background: var(--blue);
+  box-shadow: 0 2px 8px rgba(20,59,143,.3);
+  z-index: 0;
+  pointer-events: none;
+  transition: transform .32s cubic-bezier(0.34, 1.56, 0.64, 1), width .32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .nita-nav a,
 .nita-nav button {
-  padding: 8px 16px;
+  padding: 9px 16px;
   border-radius: var(--radius-pill);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--t2);
+  position: relative;
+  z-index: 1;
   transition: background .15s, color .15s;
 }
+/* Hover simple, d'origine — s'applique au bloc admin (nita-nav-admin). */
 .nita-nav a:hover { background: #f0f2f7; }
 [data-theme="dark"] .nita-nav a:hover { background: color-mix(in srgb, var(--blue) 20%, var(--card)); }
+/* Le rail principal a son propre hover, plus travaillé. */
+.nita-nav-primary a:hover { background: rgba(20, 34, 68, .06); color: var(--t1); }
+[data-theme="dark"] .nita-nav-primary a:hover { background: color-mix(in srgb, var(--blue) 20%, var(--card)); }
+.nita-nav-primary a:active { transform: scale(.94); }
 .nita-nav a.active {
   background: var(--blue);
   color: #fff;
+  box-shadow: 0 2px 8px rgba(20,59,143,.3);
+}
+/* Dans .nita-nav-primary, c'est la pilule glissante qui porte le fond —
+   le lien actif reste transparent pour la laisser transparaître. */
+.nita-nav-primary a.active { background: transparent; box-shadow: none; }
+
+.nita-nav-logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  color: var(--t3);
 }
 
 /* ───────── Réglages (langue / thème) ───────── */
 .settings-wrap { position: relative; }
+@media (min-width: 768px) {
+  .settings-wrap {
+    margin-inline-start: 6px;
+    padding-inline-start: 14px;
+    border-inline-start: 1px solid var(--border);
+  }
+}
 .settings-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 34px;
   height: 34px;
+  flex-shrink: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--card);
   color: var(--t2);
   cursor: pointer;
-  margin-inline-start: 4px;
+  transition: color .15s, border-color .15s, transform .12s;
 }
 .settings-btn:hover { color: var(--orange); border-color: var(--orange); }
+.settings-btn:active { transform: scale(.92); }
+/* Les icônes lucide-react en enfant direct d'un conteneur flex peuvent
+   s'effondrer à 0px de large (le flex-basis auto d'un <svg> avec juste des
+   attributs width/height XML, sans CSS, est traité comme 0 par certains
+   moteurs) — flex-shrink:0 les force à garder leur taille intrinsèque
+   (l'attribut width/height du SVG lui-même) sans l'écraser. */
+.settings-btn svg,
+.mbn-icon-wrap svg,
+.mbn-lang-btn svg {
+  flex-shrink: 0;
+}
 .settings-backdrop { position: fixed; inset: 0; z-index: 199; }
 .settings-dropdown {
   position: absolute;
@@ -344,6 +418,21 @@ button { font-family: inherit; }
 .section-title h2 { font-size: 20px; font-weight: 900; color: var(--t1); margin: 0; }
 .section-title a { font-size: 13px; font-weight: 700; color: var(--orange); white-space: nowrap; }
 
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c2410c;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+[data-theme="dark"] .offline-banner { background: color-mix(in srgb, var(--orange) 18%, var(--card)); border-color: color-mix(in srgb, var(--orange) 40%, var(--card)); color: var(--orange); }
+
 /* ───────── Agence card ───────── */
 .agence-grid {
   display: grid;
@@ -444,28 +533,128 @@ button { font-family: inherit; }
 @media (max-width: 640px) {
   .nita-nav a span.label { display: none; }
 }
-@media (max-width: 480px) {
-  .nita-header {
-    flex-wrap: wrap;
-    row-gap: 10px;
-    padding: 12px 16px 14px;
+
+/* ───────── Nav flottante mobile (≤767px, seuil aligné sur AgencyMap.jsx) ───────── */
+@media (max-width: 767px) {
+  .nita-nav-primary { display: none; }
+  /* Le sélecteur de langue vit dans MobileBottomNav sur mobile. */
+  .nita-nav .settings-wrap { display: none; }
+
+  /* Header réduit à la taille du logo — plus de liens/langue à loger. */
+  .nita-header { padding: 8px 16px; }
+  .nita-logo-img { height: 26px; }
+  .nita-logo-tagline { font-size: 8px; margin-top: 2px; }
+
+  /* Laisse la place à la nav flottante en bas des pages en flux normal
+     (accueil, à propos, calculatrice, admin…) — sur /carte ce sont
+     BOTTOM_NAV_SPACE / BOTTOM_NAV_SPACE_HIDDEN dans AgencyMap.jsx qui
+     jouent ce rôle pour la mise en page fixe de la carte. */
+  .app-shell { padding-bottom: 68px; }
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 250;
+    background: var(--card);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 12px 32px rgba(20,40,90,.2);
+    padding: 4px 6px 6px;
+    justify-content: space-around;
+    align-items: flex-end;
+    gap: 2px;
+    transition: transform .28s cubic-bezier(0.4, 0, 0.2, 1), opacity .2s ease;
   }
-  .nita-nav {
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .nita-nav a,
-  .nita-nav button {
-    padding: 8px 10px;
+  .mobile-bottom-nav.mobile-bottom-nav-hidden {
+    transform: translateY(130%);
+    opacity: 0;
+    pointer-events: none;
   }
 }
-@media (max-width: 340px) {
-  .nita-nav a,
-  .nita-nav button {
-    padding: 6px 6px;
-  }
+.mbn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 2px 0;
+  border-radius: var(--radius-pill);
+  color: var(--t3);
+  text-decoration: none;
+  transition: color .2s ease, transform .15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mbn-item:active { transform: scale(.9); }
+.mbn-lang-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  padding: 0;
+  transition: color .2s ease, transform .15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mbn-lang-btn:active { transform: scale(.9); }
+.mbn-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  transition: width .28s cubic-bezier(.34,1.56,.64,1), height .28s cubic-bezier(.34,1.56,.64,1),
+    margin-top .28s cubic-bezier(.34,1.56,.64,1), background .28s ease, box-shadow .28s ease, color .2s ease;
+}
+.mbn-icon-wrap svg { transition: transform .28s cubic-bezier(.34,1.56,.64,1); }
+.mbn-item.active .mbn-icon-wrap svg,
+.mbn-lang-btn.active .mbn-icon-wrap svg { transform: scale(1.08); }
+.mbn-label {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  transition: color .2s ease;
+}
+.mbn-item.active { color: var(--blue); }
+.mbn-item.active .mbn-icon-wrap {
+  width: 50px;
+  height: 50px;
+  margin-top: -28px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(20,59,143,.45), 0 0 0 5px var(--card);
+}
+
+/* Item langue dans la nav flottante — même gabarit que les NavLink,
+   mais c'est un bouton qui ouvre un menu vers le haut. */
+.mbn-lang { position: relative; }
+.mbn-lang-btn.active .mbn-icon-wrap {
+  width: 50px;
+  height: 50px;
+  margin-top: -28px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(20,59,143,.45), 0 0 0 5px var(--card);
+}
+.mbn-lang-btn.active { color: var(--blue); }
+.settings-dropdown-up {
+  top: auto;
+  bottom: calc(100% + 10px);
+  inset-inline-end: -6px;
 }
 
 /* ───────── Calculatrice de frais ───────── */
@@ -637,6 +826,7 @@ button { font-family: inherit; }
   text-align: center;
   box-shadow: 0 20px 60px rgba(20,40,90,.12);
 }
+.login-logo { height: 40px; width: auto; margin: 0 auto 12px; display: block; }
 .login-tagline { font-size: 13px; color: var(--t2); font-weight: 600; margin: 0 0 22px; }
 .login-badge {
   display: inline-flex;
@@ -680,6 +870,17 @@ button { font-family: inherit; }
   margin-bottom: 10px;
   text-align: left;
 }
+.admin-success {
+  background: #dcfce7;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 10px;
+  text-align: left;
+}
+[data-theme="dark"] .login-error { background: color-mix(in srgb, var(--red) 25%, var(--card)); }
+[data-theme="dark"] .admin-success { background: color-mix(in srgb, var(--green) 25%, var(--card)); }
 
 /* ───────── About ───────── */
 .about-hero { text-align: center; padding: 48px 24px 32px; }
@@ -1211,3 +1412,51 @@ button { font-family: inherit; }
   background: var(--bg);
 }
 .admin-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+/* ───────── Modal ───────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(10, 16, 32, .5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  animation: modalFade .15s ease;
+}
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+.modal-panel {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  width: 100%;
+  max-width: 640px;
+  margin: auto 0;
+  box-shadow: 0 24px 64px rgba(0,0,0,.28);
+  animation: modalPop .18s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+@keyframes modalPop { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h3 { margin: 0; font-size: 16px; font-weight: 900; color: var(--t1); }
+.modal-close {
+  border: none;
+  background: var(--bg);
+  color: var(--t2);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.modal-body { padding: 20px; }
+.modal-body .admin-form { margin-bottom: 0; border: none; padding: 0; border-radius: 0; }
