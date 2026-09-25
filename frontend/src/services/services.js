@@ -34,6 +34,11 @@ export async function toggleAgenceDisponible(id, disponible) {
   return data.data;
 }
 
+export async function toggleAgenceVerifie(id, verifie) {
+  const { data } = await api.patch(`/agences/${id}/verifie`, { verifie });
+  return data.data;
+}
+
 export async function login(username, password) {
   const { data } = await api.post('/auth/login', { username, password });
   return data.data;

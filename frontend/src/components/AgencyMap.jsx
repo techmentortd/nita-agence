@@ -56,8 +56,13 @@ export default function AgencyMap() {
   const [geoOk, setGeoOk] = useState(false);
   const [geoFar, setGeoFar] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(true);
-  const [sheetTall, setSheetTall] = useState(false);
+  // Un seul contrôle pour la feuille mobile (remplace les anciens boutons
+  // séparés "masquer"/"agrandir") : un tap sur la poignée fait défiler
+  // caché → aperçu → normal → plein écran ; on peut aussi la glisser
+  // directement à la main (voir handleDragStart/Move/End).
+  const [sheetSnap, setSheetSnap] = useState('half');
+  const [dragHeight, setDragHeight] = useState(null);
+  const dragStartRef = useRef({ y: 0, height: 0, moved: false });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [offlineData, setOfflineData] = useState(false);
@@ -69,6 +74,22 @@ export default function AgencyMap() {
   const hasCenteredRef = useRef(false);
   const downloadingRef = useRef(false);
   const lastListScrollRef = useRef(0);
+  const containerRef = useRef(null);
+  const [containerH, setContainerH] = useState(() => window.innerHeight - 62 - BOTTOM_NAV_SPACE);
+
+  // Mesure la vraie hauteur disponible (sous l'en-tête, au-dessus de la nav
+  // flottante en bas — ce conteneur a déjà `bottom: BOTTOM_NAV_SPACE`) pour
+  // que le cran plein écran de la feuille ne dépasse ni l'un ni l'autre,
+  // quelle que soit la taille de l'écran ou l'état de la nav.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const el = containerRef.current;
+    const update = () => setContainerH(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Rend la nav flottante en quittant la page — elle ne doit rester masquée
   // que pendant le défilement de la liste d'agences.
@@ -392,11 +413,50 @@ export default function AgencyMap() {
 
   const filtered = getFiltered();
 
-  const SHEET_H = isMobile && sheetTall ? Math.round(window.innerHeight * 0.82) : 340;
+  // "full" laisse ~70px de carte visible en haut du conteneur (donc bien
+  // sous l'en-tête) ; le conteneur lui-même s'arrête déjà au-dessus de la
+  // nav flottante en bas (bottom: BOTTOM_NAV_SPACE), donc "hidden" (juste la
+  // poignée) ne peut jamais la chevaucher non plus.
+  const SHEET_HEIGHTS = { hidden: 44, peek: 128, half: 340, full: Math.max(340, containerH - 70) };
+  const SHEET_ORDER = ['hidden', 'peek', 'half', 'full'];
+  const SHEET_H = isMobile ? (dragHeight ?? SHEET_HEIGHTS[sheetSnap]) : 340;
+  const cycleSheetSnap = () => setSheetSnap((s) => SHEET_ORDER[(SHEET_ORDER.indexOf(s) + 1) % SHEET_ORDER.length]);
+
+  // ── Glisser la poignée à la main : suit le doigt en direct, puis s'aimante
+  // au cran le plus proche au relâchement. Un tap sans vrai mouvement reste
+  // traité comme un clic (cycle au cran suivant).
+  const handleDragStart = (e) => {
+    dragStartRef.current = { y: e.clientY, height: SHEET_HEIGHTS[sheetSnap], moved: false };
+    setDragHeight(SHEET_HEIGHTS[sheetSnap]);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const handleDragMove = (e) => {
+    if (dragHeight === null) return;
+    const dy = dragStartRef.current.y - e.clientY;
+    if (Math.abs(dy) > 4) dragStartRef.current.moved = true;
+    const next = Math.min(SHEET_HEIGHTS.full, Math.max(SHEET_HEIGHTS.hidden, dragStartRef.current.height + dy));
+    setDragHeight(next);
+  };
+  const handleDragEnd = () => {
+    if (dragHeight === null) return;
+    if (!dragStartRef.current.moved) {
+      cycleSheetSnap();
+    } else {
+      let nearest = SHEET_ORDER[0];
+      let bestDiff = Infinity;
+      for (const key of SHEET_ORDER) {
+        const diff = Math.abs(SHEET_HEIGHTS[key] - dragHeight);
+        if (diff < bestDiff) { bestDiff = diff; nearest = key; }
+      }
+      setSheetSnap(nearest);
+    }
+    setDragHeight(null);
+  };
   const activeFilterCount = (typeFilter !== 'all' ? 1 : 0) + (distFilter !== 'all' ? 1 : 0);
 
   return (
     <div
+      ref={containerRef}
       style={{
         position: 'fixed',
         inset: 0,
@@ -429,8 +489,7 @@ export default function AgencyMap() {
                 right: 0,
                 height: SHEET_H,
                 zIndex: 20,
-                transform: sheetOpen ? 'translateY(0)' : 'translateY(100%)',
-                transition: 'transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)',
+                transition: dragHeight === null ? 'height 0.4s cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
                 background: '#fff',
                 borderRadius: '20px 20px 0 0',
                 borderTop: '1px solid #e5e9f0',
@@ -455,12 +514,19 @@ export default function AgencyMap() {
       >
         {isMobile && (
           <div
-            onClick={() => setSheetTall((v) => !v)}
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+            onPointerCancel={handleDragEnd}
             title={t('map_expand_hint')}
-            style={{ padding: '10px 0 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer', flexShrink: 0 }}
+            style={{ padding: '10px 0 2px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'grab', flexShrink: 0, touchAction: 'none' }}
           >
-            <div style={{ width: 36, height: 4, background: '#e2e8f0', borderRadius: 2 }} />
-            {sheetTall ? <ChevronDown size={13} color="#c4cad6" /> : <ChevronUp size={13} color="#c4cad6" />}
+            <div style={{ width: 36, height: 4, background: '#e2e8f0', borderRadius: 2, transition: 'background .2s' }} />
+            <ChevronUp
+              size={13}
+              color="#c4cad6"
+              style={{ transform: sheetSnap === 'full' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}
+            />
           </div>
         )}
 
@@ -717,32 +783,6 @@ export default function AgencyMap() {
         </button>
       )}
 
-      {isMobile && (
-        <button
-          onClick={() => setSheetOpen((v) => !v)}
-          aria-label={sheetOpen ? t('map_hide_panel') : t('map_show_panel')}
-          style={{
-            position: 'absolute',
-            bottom: sheetOpen ? SHEET_H + 12 : 16,
-            right: 68,
-            zIndex: 30,
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            background: '#fff',
-            border: '1px solid #e5e9f0',
-            boxShadow: '0 2px 16px rgba(0,0,0,.18)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            transition: 'bottom 0.4s cubic-bezier(0.32, 0.72, 0, 1)',
-          }}
-        >
-          <ChevronUp size={20} color="#4b5872" style={{ transform: sheetOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }} />
-        </button>
-      )}
-
       {/* ── CARTE ── */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', zIndex: 1 }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
@@ -826,7 +866,7 @@ export default function AgencyMap() {
           }}
           style={{
             position: 'absolute',
-            bottom: isMobile ? (sheetOpen ? SHEET_H + 12 : 16) : selected ? 90 : 20,
+            bottom: isMobile ? SHEET_H + 12 : selected ? 90 : 20,
             right: 16,
             zIndex: 400,
             width: 42,

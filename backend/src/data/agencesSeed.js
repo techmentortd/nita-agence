@@ -71,4 +71,5 @@ module.exports = RAW.map(([nom, type, quartier, adresse, latitude, longitude], i
   services: SERVICES,
   actif: true,
   disponible: true,
+  verifie: false,
 }));

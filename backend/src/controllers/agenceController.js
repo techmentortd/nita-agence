@@ -200,6 +200,46 @@ exports.toggleDisponible = async (req, res, next) => {
   }
 };
 
+// Vérification des informations par le chef d'agence — même logique de
+// portée par zone que toggleDisponible : un chef d'agence ne confirme que
+// ses propres agences, le super-admin toutes.
+// Une fois confirmée par un chef d'agence, l'information ne peut plus être
+// annulée par lui (action volontairement irréversible, pour garantir que
+// "vérifiée" veut dire quelque chose) — seul le super-admin peut revenir en
+// arrière en cas d'erreur.
+exports.toggleVerifie = async (req, res, next) => {
+  try {
+    const isZoneChief = !!req.admin?.zone;
+
+    if (useFallback) {
+      const agence = fallbackAgences.find((a) => String(a.id) === req.params.id);
+      if (!agence) return res.status(404).json({ message: 'Agence introuvable' });
+      if (forbiddenZone(req.admin, agence.zone)) {
+        return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+      }
+      if (isZoneChief && agence.verifie) {
+        return res.status(400).json({ message: 'Une information déjà confirmée ne peut plus être annulée' });
+      }
+      agence.verifie = isZoneChief ? true : (req.body.verifie !== undefined ? !!req.body.verifie : !agence.verifie);
+      return res.json({ message: 'ok', data: agence });
+    }
+
+    const { rows: current } = await pool.query('SELECT verifie, zone FROM agences WHERE id = $1 AND actif = true', [req.params.id]);
+    if (!current.length) return res.status(404).json({ message: 'Agence introuvable' });
+    if (forbiddenZone(req.admin, current[0].zone)) {
+      return res.status(403).json({ message: 'Vous ne pouvez modifier que les agences de votre zone' });
+    }
+    if (isZoneChief && current[0].verifie) {
+      return res.status(400).json({ message: 'Une information déjà confirmée ne peut plus être annulée' });
+    }
+    const next = isZoneChief ? true : (req.body.verifie !== undefined ? !!req.body.verifie : !current[0].verifie);
+    const { rows } = await pool.query('UPDATE agences SET verifie = $1 WHERE id = $2 RETURNING *', [next, req.params.id]);
+    res.json({ message: 'ok', data: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.remove = async (req, res, next) => {
   try {
     if (useFallback) {

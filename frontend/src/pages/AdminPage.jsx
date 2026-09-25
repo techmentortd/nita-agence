@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, LogOut, Building2, CheckCircle2, XCircle, MapPinned, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, LogOut, Building2, CheckCircle2, XCircle, MapPinned, Search, BadgeCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchAgences, createAgence, updateAgence, deleteAgence, toggleAgenceDisponible } from '../services/services';
+import { fetchAgences, createAgence, updateAgence, deleteAgence, toggleAgenceDisponible, toggleAgenceVerifie } from '../services/services';
 import { ZONES } from '../utils/zones';
 import ZoneBadge from '../components/ZoneBadge';
 import Modal from '../components/Modal';
@@ -17,6 +17,7 @@ export function AdminPage() {
   const [error, setError] = useState('');
   const [zoneFilter, setZoneFilter] = useState(adminZone || 'all');
   const [search, setSearch] = useState('');
+  const [verifyConfirm, setVerifyConfirm] = useState(null); // agence en attente de confirmation
 
   const { data: agences = [], isLoading } = useQuery({
     queryKey: ['admin-agences'],
@@ -43,6 +44,7 @@ export function AdminPage() {
     total: scoped.length,
     disponibles: scoped.filter((a) => a.disponible !== false).length,
     indisponibles: scoped.filter((a) => a.disponible === false).length,
+    verifiees: scoped.filter((a) => a.verifie).length,
     zones: new Set(scoped.map((a) => a.zone)).size,
   }), [scoped]);
 
@@ -74,6 +76,12 @@ export function AdminPage() {
     mutationFn: ({ id, disponible }) => toggleAgenceDisponible(id, disponible),
     onSuccess: invalidate,
     onError: (e) => setError(e.response?.data?.message || 'Erreur lors du changement de statut'),
+  });
+
+  const toggleVerifieMut = useMutation({
+    mutationFn: ({ id, verifie }) => toggleAgenceVerifie(id, verifie),
+    onSuccess: () => { invalidate(); setVerifyConfirm(null); },
+    onError: (e) => setError(e.response?.data?.message || 'Erreur lors de la vérification'),
   });
 
   const handleSubmit = (payload) => {
@@ -115,6 +123,10 @@ export function AdminPage() {
           <div className="admin-stat-card">
             <div className="admin-stat-icon" style={{ '--stat-color': 'var(--red)' }}><XCircle size={16} /></div>
             <div><div className="admin-stat-n">{stats.indisponibles}</div><div className="admin-stat-l">Indisponibles</div></div>
+          </div>
+          <div className="admin-stat-card">
+            <div className="admin-stat-icon" style={{ '--stat-color': 'var(--blue)' }}><BadgeCheck size={16} /></div>
+            <div><div className="admin-stat-n">{stats.verifiees}/{stats.total}</div><div className="admin-stat-l">Infos vérifiées</div></div>
           </div>
           <div className="admin-stat-card">
             <div className="admin-stat-icon" style={{ '--stat-color': 'var(--orange)' }}><MapPinned size={16} /></div>
@@ -164,14 +176,15 @@ export function AdminPage() {
               <th>Zone</th>
               <th>Type</th>
               <th>Disponibilité</th>
+              <th>Infos vérifiées</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24 }}>Chargement…</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24 }}>Chargement…</td></tr>
             ) : !visible.length ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24 }}>Aucune agence</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24 }}>Aucune agence</td></tr>
             ) : (
               visible.map((a) => (
                 <tr key={a.id}>
@@ -192,6 +205,24 @@ export function AdminPage() {
                       <span className="status-dot" />
                       {a.disponible === false ? 'Indisponible' : 'Disponible'}
                     </button>
+                  </td>
+                  <td data-label="Infos vérifiées">
+                    {a.verifie && adminZone ? (
+                      // Un chef d'agence ne peut plus annuler une fois confirmé.
+                      <span className="status-toggle verify" style={{ cursor: 'default', opacity: .85 }} title="Confirmée — ne peut plus être annulée">
+                        <BadgeCheck size={12} /> Vérifiée
+                      </span>
+                    ) : (
+                      <button
+                        className={`status-toggle verify${a.verifie ? '' : ' off'}`}
+                        onClick={() => (a.verifie ? toggleVerifieMut.mutate({ id: a.id, verifie: false }) : setVerifyConfirm(a))}
+                        disabled={toggleVerifieMut.isPending}
+                        title={a.verifie ? 'Marquer comme non vérifiée' : 'Confirmer les informations de cette agence'}
+                      >
+                        <BadgeCheck size={12} />
+                        {a.verifie ? 'Vérifiée' : 'Confirmer'}
+                      </button>
+                    )}
                   </td>
                   <td data-label="Actions" className="admin-table-actions-cell">
                     <div className="row-actions">
@@ -216,6 +247,32 @@ export function AdminPage() {
 
       <AdminSelfAccountPanel />
       {!adminZone && <AdminUsersPanel />}
+
+      {verifyConfirm && (
+        <Modal title="Confirmer les informations" onClose={() => setVerifyConfirm(null)}>
+          <p style={{ fontSize: 14, color: 'var(--t2)', lineHeight: 1.6, margin: '0 0 8px' }}>
+            Confirmer que les informations de <strong style={{ color: 'var(--t1)' }}>{verifyConfirm.nom}</strong> sont exactes et à jour ?
+          </p>
+          {adminZone && (
+            <p style={{ fontSize: 13, color: 'var(--red)', fontWeight: 700, margin: '0 0 20px' }}>
+              Cette action est définitive — vous ne pourrez plus l'annuler ensuite.
+            </p>
+          )}
+          <div className="admin-form-actions">
+            <button
+              type="button"
+              className="btn btn-orange"
+              disabled={toggleVerifieMut.isPending}
+              onClick={() => toggleVerifieMut.mutate({ id: verifyConfirm.id, verifie: true })}
+            >
+              {toggleVerifieMut.isPending ? 'Confirmation…' : 'Oui, confirmer'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setVerifyConfirm(null)}>
+              Annuler
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }

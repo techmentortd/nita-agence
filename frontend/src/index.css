@@ -1411,6 +1411,9 @@ button { font-family: inherit; }
 .status-toggle .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .status-toggle.off { background: #fee2e2; color: var(--red); }
 .status-toggle:disabled { opacity: .6; cursor: default; }
+.status-toggle.verify { background: #eaf0ff; color: var(--blue); }
+.status-toggle.verify.off { background: var(--bg); color: var(--t3); }
+[data-theme="dark"] .status-toggle.verify { background: color-mix(in srgb, var(--blue) 22%, var(--card)); }
 
 .admin-form {
   background: var(--card);

@@ -10,6 +10,7 @@ router.get('/', controller.list);
 router.post('/', requireAuth, controller.create);
 router.put('/:id', requireAuth, controller.update);
 router.patch('/:id/disponible', requireAuth, controller.toggleDisponible);
+router.patch('/:id/verifie', requireAuth, controller.toggleVerifie);
 router.delete('/:id', requireAuth, controller.remove);
 
 module.exports = router;
