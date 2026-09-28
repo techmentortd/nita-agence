@@ -2,7 +2,7 @@
  * AgencyMap — carte des agences NITA (N'Djamena)
  * OpenStreetMap + Leaflet, itinéraire réel via OSRM, panneau latéral animé.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -49,6 +49,62 @@ export default function AgencyMap() {
   const [userLocation, setUserLocation] = useState({ ...NDJAMENA });
   const [refLocation, setRefLocation] = useState({ ...NDJAMENA });
   const [selected, setSelected] = useState(null);
+  // Décalage (px) de la fiche de l'agence sélectionnée, que l'utilisateur
+  // peut glisser n'importe où sur la carte pour dégager la vue pendant la
+  // navigation. Reste dans les limites de la carte.
+  const [cardOffset, setCardOffset] = useState({ x: 0, y: 0 });
+  const [cardDragging, setCardDragging] = useState(false);
+  const cardRef = useRef(null);
+  const cardDragRef = useRef(null);
+  const [cardH, setCardH] = useState(0);
+
+  // Hauteur de la fiche, pour placer le bouton "Me localiser" au-dessus
+  // d'elle sur mobile (sinon ils se chevauchent).
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) { setCardH(0); return; }
+    setCardH(el.offsetHeight);
+    const ro = new ResizeObserver(() => setCardH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [selected]);
+
+  const onCardPointerDown = (e) => {
+    // Les boutons/liens de la fiche restent cliquables normalement.
+    if (e.button !== 0 || e.target.closest('button, a')) return;
+    const card = cardRef.current;
+    const parent = card?.parentElement;
+    if (!card || !parent) return;
+    const r = card.getBoundingClientRect();
+    const p = parent.getBoundingClientRect();
+    const M = 8; // marge minimale avec le bord de la carte
+    cardDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origin: cardOffset,
+      minX: cardOffset.x + (p.left + M - r.left),
+      maxX: cardOffset.x + (p.right - M - r.right),
+      minY: cardOffset.y + (p.top + M - r.top),
+      maxY: cardOffset.y + (p.bottom - M - r.bottom),
+    };
+    card.setPointerCapture(e.pointerId);
+    setCardDragging(true);
+  };
+
+  const onCardPointerMove = (e) => {
+    const d = cardDragRef.current;
+    if (!d) return;
+    const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+    setCardOffset({
+      x: clamp(d.origin.x + e.clientX - d.startX, d.minX, d.maxX),
+      y: clamp(d.origin.y + e.clientY - d.startY, d.minY, d.maxY),
+    });
+  };
+
+  const onCardPointerUp = () => {
+    cardDragRef.current = null;
+    setCardDragging(false);
+  };
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [distFilter, setDistFilter] = useState('all');
@@ -805,19 +861,32 @@ export default function AgencyMap() {
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden', zIndex: 1 }}>
         <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
 
-        {selected && (
+        {/* Liste dépliée en plein écran sur mobile : la carte est couverte,
+            inutile d'y afficher la fiche. */}
+        {selected && !(isMobile && sheetSnap === 'full') && (
           <div
+            ref={cardRef}
+            onPointerDown={onCardPointerDown}
+            onPointerMove={onCardPointerMove}
+            onPointerUp={onCardPointerUp}
+            onPointerCancel={onCardPointerUp}
+            title={t('map_card_drag')}
             style={{
               position: 'absolute',
-              bottom: 20,
+              // Sur mobile, au-dessus du bottom sheet (sinon elle passe dessous).
+              bottom: isMobile ? SHEET_H + 12 : 20,
               left: '50%',
-              transform: 'translateX(-50%)',
+              transform: `translate(calc(-50% + ${cardOffset.x}px), ${cardOffset.y}px)`,
               zIndex: 400,
+              touchAction: 'none',
+              userSelect: 'none',
+              transition: dragHeight === null ? 'bottom .4s cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
+              cursor: cardDragging ? 'grabbing' : 'grab',
               background: '#fff',
               borderRadius: 16,
-              boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+              boxShadow: cardDragging ? '0 14px 40px rgba(0,0,0,.28)' : '0 8px 32px rgba(0,0,0,.18)',
               border: '1px solid #e5e9f0',
-              padding: '12px 16px',
+              padding: '18px 16px 12px',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
@@ -826,6 +895,8 @@ export default function AgencyMap() {
               animation: 'slideUp .2s ease',
             }}
           >
+            {/* Poignée : indique que la fiche peut être déplacée. */}
+            <span aria-hidden="true" style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 36, height: 4, borderRadius: 2, background: '#d5dbe6' }} />
             <div style={{ width: 48, height: 48, borderRadius: 10, background: '#fff1e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Building2 size={24} color={ORANGE} />
             </div>
@@ -864,6 +935,7 @@ export default function AgencyMap() {
             <button
               onClick={() => {
                 setSelected(null);
+                setCardOffset({ x: 0, y: 0 });
                 setFollowing(false);
                 setHasRoute(false);
                 if (routingRef.current) {
@@ -884,7 +956,9 @@ export default function AgencyMap() {
           }}
           style={{
             position: 'absolute',
-            bottom: isMobile ? SHEET_H + 12 : selected ? 90 : 20,
+            bottom: isMobile
+              ? SHEET_H + 12 + (selected && cardOffset.x === 0 && cardOffset.y === 0 ? cardH + 12 : 0)
+              : selected ? 90 : 20,
             right: 16,
             zIndex: 400,
             width: 42,
