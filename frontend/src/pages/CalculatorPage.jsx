@@ -13,7 +13,7 @@ export function CalculatorPage() {
   const [raw, setRaw] = useState('100000');
 
   const montant = Number(raw.replace(/[^\d]/g, ''));
-  const result = useMemo(() => calculerFrais(montant), [montant]);
+  const result = useMemo(() => calculerFrais(montant, zone), [montant, zone]);
 
   const handleChange = (e) => {
     const digits = e.target.value.replace(/[^\d]/g, '');
@@ -22,7 +22,6 @@ export function CalculatorPage() {
 
   const displayValue = montant ? montant.toLocaleString('fr-FR') : '';
   const paysLabel = countryLabel(pays, lang);
-  const intlNote = t('calc_intl_note').split('%PAYS%').join(paysLabel);
 
   return (
     <section className="section" style={{ maxWidth: 720 }}>
@@ -84,12 +83,14 @@ export function CalculatorPage() {
           ))}
         </div>
 
-        {zone === 'international' ? (
-          <div className="calc-empty" style={{ textAlign: 'left' }}>
-            {intlNote}
-          </div>
-        ) : result && !result.horsGrille ? (
+        {result && !result.horsGrille ? (
           <div className="calc-result">
+            {zone === 'international' && (
+              <div className="calc-result-row">
+                <span>{t('calc_label_country')}</span>
+                <strong>{paysLabel}</strong>
+              </div>
+            )}
             <div className="calc-result-row">
               <span>{t('calc_result_sent')}</span>
               <strong>{fmtFcfa(result.montant)}</strong>

@@ -186,16 +186,26 @@ button { font-family: inherit; }
    le lien actif reste transparent pour la laisser transparaître. */
 .nita-nav-primary a.active { background: transparent; box-shadow: none; }
 
-.nita-nav-logout-btn {
+.nita-nav-admin a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.nita-nav .nita-nav-logout-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 8px;
   color: var(--t3);
 }
+.nita-nav .nita-nav-logout-btn:hover { background: #f0f2f7; color: var(--red); }
+[data-theme="dark"] .nita-nav .nita-nav-logout-btn:hover { background: color-mix(in srgb, var(--red) 18%, var(--card)); }
 
 /* ───────── Réglages (langue / thème) ───────── */
 .settings-wrap { position: relative; }
@@ -301,7 +311,7 @@ button { font-family: inherit; }
   box-shadow: 0 6px 18px rgba(20, 59, 143, .3);
 }
 .btn-ghost {
-  background: #fff;
+  background: var(--card);
   color: var(--t1);
   border: 1px solid var(--border);
 }
@@ -404,6 +414,67 @@ button { font-family: inherit; }
 }
 .stat-pill .n { font-size: 22px; font-weight: 900; color: var(--blue-dark); }
 .stat-pill .l { font-size: 12px; color: var(--t3); font-weight: 600; }
+/* Explication quand la localisation échoue (refusée, GPS coupé…). */
+.geo-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 520px;
+  margin: 12px auto 0;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--orange) 35%, var(--border));
+  border-radius: 14px;
+  text-align: start;
+  position: relative;
+  z-index: 1;
+}
+.geo-notice-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--orange) 14%, transparent);
+  color: var(--orange);
+}
+.geo-notice-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.geo-notice-text strong { font-size: 13px; color: var(--t1); }
+.geo-notice-text span { font-size: 12px; color: var(--t2); line-height: 1.45; }
+.geo-notice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--orange);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* Sur petit écran : icône + texte sur toute la largeur, bouton en dessous. */
+@media (max-width: 520px) {
+  .geo-notice { flex-wrap: wrap; align-items: flex-start; }
+  .geo-notice-btn { width: 100%; justify-content: center; padding: 10px 12px; }
+}
+/* Chargement de "l'agence la plus proche" (en attente de la position). */
+.stat-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  border: 3px solid color-mix(in srgb, var(--orange) 25%, transparent);
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: statSpin .8s linear infinite;
+}
+@keyframes statSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .stat-spinner { animation-duration: 2.4s; } }
 
 /* ───────── Section ───────── */
 .section { width: 100%; box-sizing: border-box; padding: 40px 24px; max-width: 1080px; margin: 0 auto; }
@@ -532,6 +603,15 @@ button { font-family: inherit; }
 
 @media (max-width: 640px) {
   .nita-nav a span.label { display: none; }
+  /* Sans libellé, le lien Admin devient une pastille ronde de la même
+     taille que le bouton de déconnexion. */
+  .nita-nav-admin a {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .nita-nav { gap: 6px; }
 }
 
 /* ───────── Nav flottante mobile (≤767px, seuil aligné sur AgencyMap.jsx) ───────── */
@@ -1247,6 +1327,8 @@ button { font-family: inherit; }
   margin-bottom: 0;
 }
 
+.admin-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -1436,6 +1518,31 @@ button { font-family: inherit; }
   background: var(--bg);
 }
 .admin-form-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+/* Admin sur mobile — placé après toutes les règles admin de base. */
+@media (max-width: 640px) {
+  .section:has(.admin-header-card) { padding: 20px 16px; }
+  .admin-header-card { padding: 16px; }
+  .admin-toolbar { flex-direction: column; align-items: stretch; margin-bottom: 12px; }
+  .admin-header-card .admin-toolbar { margin-bottom: 0; }
+  .admin-toolbar h1 { font-size: 19px !important; }
+  .admin-toolbar-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .admin-toolbar-actions .btn,
+  .admin-toolbar > .btn { padding: 10px 12px; font-size: 13px; width: 100%; white-space: nowrap; }
+  .admin-stats { grid-template-columns: 1fr 1fr; }
+  .admin-stat-card { padding: 10px 12px; }
+  .admin-stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  /* Fiches du tableau : libellé à gauche, valeur à droite, pour des fiches
+     plus compactes. */
+  .admin-table td { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; text-align: end; }
+  /* Onglets de zones : une seule ligne défilante au lieu de plusieurs lignes. */
+  .admin-zone-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; }
+  .admin-zone-tabs::-webkit-scrollbar { display: none; }
+  .admin-zone-tabs button { flex-shrink: 0; }
+  .admin-form { padding: 16px; }
+  .admin-form-grid { grid-template-columns: 1fr; }
+  .admin-form-actions .btn { flex: 1; }
+}
 
 /* ───────── Modal ───────── */
 .modal-backdrop {

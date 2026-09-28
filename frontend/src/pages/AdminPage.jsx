@@ -101,7 +101,7 @@ export function AdminPage() {
               <ZoneBadge zone={adminZone} />
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="admin-toolbar-actions">
             <button className="btn btn-orange" onClick={() => setEditing({})}>
               <Plus size={14} /> Nouvelle agence
             </button>
@@ -189,8 +189,10 @@ export function AdminPage() {
               visible.map((a) => (
                 <tr key={a.id}>
                   <td data-label="Nom" style={{ fontWeight: 700, color: 'var(--t1)' }}>
-                    <Building2 size={13} style={{ verticalAlign: '-2px', marginRight: 6, color: 'var(--orange)' }} />
-                    {a.nom}
+                    <span>
+                      <Building2 size={13} style={{ verticalAlign: '-2px', marginInlineEnd: 6, color: 'var(--orange)' }} />
+                      {a.nom}
+                    </span>
                   </td>
                   <td data-label="Quartier">{a.quartier}</td>
                   <td data-label="Zone"><ZoneBadge zone={a.zone} fallback="—" /></td>

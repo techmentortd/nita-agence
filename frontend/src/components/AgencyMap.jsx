@@ -68,7 +68,8 @@ export default function AgencyMap() {
   const [offlineData, setOfflineData] = useState(false);
   const [dlState, setDlState] = useState('idle'); // idle | downloading | done | error
   const [dlProgress, setDlProgress] = useState({ done: 0, total: 0 });
-  const [tileCache, setTileCache] = useState({ cached: 0 });
+  const [tileCache, setTileCache] = useState(null); // null = pas encore vérifié
+  const [dlDoneVisible, setDlDoneVisible] = useState(false);
   const [following, setFollowing] = useState(false);
   const [hasRoute, setHasRoute] = useState(false);
   const hasCenteredRef = useRef(false);
@@ -385,7 +386,13 @@ export default function AgencyMap() {
       // hors connexion par la suite.
       const info = await getOfflineMapCacheInfo();
       setTileCache(info);
-      setDlState(result.success > 0 && info.cached > 0 ? 'done' : 'error');
+      const ok = result.success > 0 && info.cached > 0;
+      setDlState(ok ? 'done' : 'error');
+      // Confirmation affichée quelques secondes, puis le bloc disparaît.
+      if (ok) {
+        setDlDoneVisible(true);
+        setTimeout(() => setDlDoneVisible(false), 3000);
+      }
     } catch {
       setDlState('error');
     } finally {
@@ -412,6 +419,15 @@ export default function AgencyMap() {
   }, [loading]);
 
   const filtered = getFiltered();
+
+  // Le bloc de téléchargement n'a plus lieu d'être une fois la carte en
+  // cache : on ne l'affiche que pendant le téléchargement, en cas d'échec,
+  // juste après la réussite (confirmation) ou si rien n'est encore en cache.
+  const showDlBlock =
+    dlState === 'downloading' ||
+    dlState === 'error' ||
+    dlDoneVisible ||
+    (dlState === 'idle' && tileCache != null && !tileCache.cached);
 
   // "full" laisse ~70px de carte visible en haut du conteneur (donc bien
   // sous l'en-tête) ; le conteneur lui-même s'arrête déjà au-dessus de la
@@ -643,6 +659,7 @@ export default function AgencyMap() {
           </div>
         )}
 
+        {showDlBlock && (
         <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e9f0', flexShrink: 0 }}>
           {dlState === 'downloading' ? (
             <div>
@@ -667,13 +684,14 @@ export default function AgencyMap() {
             >
               {dlState === 'done' ? <Check size={13} /> : <Download size={13} />}
               {dlState === 'done'
-                ? t('map_dl_available').replace('{n}', tileCache.cached)
+                ? t('map_dl_available').replace('{n}', tileCache?.cached ?? 0)
                 : dlState === 'error'
                 ? t('map_dl_retry')
                 : t('map_dl_download')}
             </button>
           )}
         </div>
+        )}
 
         <div className="map-sidebar-panel" onScroll={isMobile ? handleListScroll : undefined} style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {loading ? (

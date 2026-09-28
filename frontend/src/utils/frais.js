@@ -16,19 +16,21 @@ export const TIERS = [
   { min: 1000000, max: 25000000, taux: 0.01 },
 ];
 
-// Pays où NITA est présent (réseau régional) — le site tchad.nitatransfert.com
-// ne publie une grille tarifaire que pour la zone "National" (Tchad) ; les
-// frais internationaux sont communiqués en agence, donc pas de calcul
-// automatique ici pour éviter d'afficher un chiffre inventé.
+// Zone internationale : taux unique de 5,5 % sur tout le montant, quel que
+// soit le pays de destination.
+export const TIER_INTERNATIONAL = { min: 1, max: 25000000, taux: 0.055 };
+
+// Pays où NITA est présent (réseau régional).
 export const PAYS_INTERNATIONAL = [
   'Bénin', 'Burkina Faso', "Côte d'Ivoire", 'Ghana', 'Guinée-Bissau', 'Guinée',
   'Mali', 'Mauritanie', 'Niger', 'Nigeria', 'Sénégal', 'Togo',
 ];
 
-export function calculerFrais(montant) {
+export function calculerFrais(montant, zone = 'national') {
   const m = Number(montant);
   if (!m || m <= 0) return null;
-  const tier = TIERS.find((t) => m >= t.min && m <= t.max);
+  const grille = zone === 'international' ? [TIER_INTERNATIONAL] : TIERS;
+  const tier = grille.find((t) => m >= t.min && m <= t.max);
   if (!tier) {
     return { montant: m, frais: null, total: null, tier: null, horsGrille: true };
   }

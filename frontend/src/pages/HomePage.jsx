@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Search, MapPin, Navigation, Building2, Clock, Phone, ArrowRight, ArrowLeft, WifiOff } from 'lucide-react';
-import { useGeoPosition } from '../hooks/useGeoPosition';
+import { Search, MapPin, MapPinOff, Navigation, Building2, Clock, Phone, ArrowRight, ArrowLeft, WifiOff, RotateCw } from 'lucide-react';
+import { useGeoLocation } from '../hooks/useGeoPosition';
 import { fetchAgences, fetchAgencesStats } from '../services/services';
 import { fmtDist, haversineKm } from '../utils/utils';
 import { useThemeLang } from '../context/ThemeLangContext';
@@ -10,21 +10,22 @@ import { horairesLabel } from '../i18n/translations';
 import { saveAgences, getAllAgences } from '../lib/db';
 
 export function HomePage() {
-  const coords = useGeoPosition();
+  const { coords, error: geoError, retry: retryGeo } = useGeoLocation();
   const navigate = useNavigate();
   const { t, lang } = useThemeLang();
   const [search, setSearch] = useState('');
   const [offlineData, setOfflineData] = useState(false);
   const SeeAllArrow = lang === 'ar' ? ArrowLeft : ArrowRight;
 
-  // Hors ligne : repli sur la copie IndexedDB (même logique que la carte,
-  // voir components/AgencyMap.jsx) — la distance est alors recalculée
-  // côté client pour que "l'agence la plus proche" reste juste sans réseau.
-  const { data: agences = [], isLoading } = useQuery({
-    queryKey: ['home-agences', coords?.lat, coords?.lng],
+  // Les agences sont chargées une seule fois, sans la position : la distance
+  // est calculée ici dès que la géolocalisation répond, sans attendre un
+  // second aller-retour serveur. Hors ligne : repli sur la copie IndexedDB
+  // (même logique que la carte, voir components/AgencyMap.jsx).
+  const { data: rawAgences = [], isLoading } = useQuery({
+    queryKey: ['home-agences'],
     queryFn: async () => {
       try {
-        const rows = await fetchAgences({ lat: coords?.lat, lng: coords?.lng });
+        const rows = await fetchAgences();
         setOfflineData(false);
         if (rows?.length) saveAgences(rows);
         return rows;
@@ -32,16 +33,23 @@ export function HomePage() {
         const cached = await getAllAgences();
         if (!cached.length) throw err;
         setOfflineData(true);
-        if (coords?.lat) {
-          return cached
-            .map((a) => ({ ...a, distance_km: Math.round(haversineKm(coords.lat, coords.lng, a.latitude, a.longitude) * 100) / 100 }))
-            .sort((a, b) => a.distance_km - b.distance_km);
-        }
         return cached;
       }
     },
-    placeholderData: (prev) => prev,
   });
+
+  // Même classement que le serveur (backend agenceController.scoreAgence) :
+  // distance, avec un bonus de 0,4 km pour l'agence principale.
+  const agences = useMemo(() => {
+    if (!coords?.lat) return rawAgences;
+    return rawAgences
+      .map((a) => {
+        const d = haversineKm(coords.lat, coords.lng, a.latitude, a.longitude);
+        const score = Math.max(0, d - (a.type === 'principale' ? 0.4 : 0));
+        return { ...a, distance_km: Math.round(d * 100) / 100, score };
+      })
+      .sort((a, b) => a.score - b.score);
+  }, [rawAgences, coords?.lat, coords?.lng]);
 
   const { data: stats = {} } = useQuery({
     queryKey: ['agences-stats'],
@@ -102,7 +110,19 @@ export function HomePage() {
               <div className="l">{t('home_stat_agences')}</div>
             </div>
             <div className="stat-pill">
-              <div className="n">{nearest ? fmtDist(nearest.distance_km) : '—'}</div>
+              <div className="n">
+                {nearest ? (
+                  fmtDist(nearest.distance_km)
+                ) : coords === null || (coords?.lat && isLoading) ? (
+                  // En attente de la position (ou des agences) : on montre que
+                  // ça charge plutôt qu'un "—" qui ressemble à un bug.
+                  <span className="stat-spinner" role="status" aria-label={t('home_locating')} />
+                ) : geoError ? (
+                  <MapPinOff size={22} color="var(--t3)" style={{ verticalAlign: 'middle' }} aria-label={t('geo_off_short')} />
+                ) : (
+                  '—'
+                )}
+              </div>
               <div className="l">{t('home_stat_nearest')}</div>
             </div>
             <div className="stat-pill">
@@ -110,6 +130,21 @@ export function HomePage() {
               <div className="l">{t('home_stat_support')}</div>
             </div>
           </div>
+
+          {geoError && !coords?.lat && (
+            <div className="geo-notice" role="alert">
+              <span className="geo-notice-icon"><MapPinOff size={17} /></span>
+              <div className="geo-notice-text">
+                <strong>{t(`geo_err_${geoError}_title`)}</strong>
+                <span>{t(`geo_err_${geoError}_help`)}</span>
+              </div>
+              {geoError !== 'unsupported' && (
+                <button className="geo-notice-btn" onClick={retryGeo}>
+                  <RotateCw size={13} /> {t('geo_retry')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

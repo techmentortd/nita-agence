@@ -69,7 +69,7 @@ export default function Header() {
         {isAuthenticated && (
           <div className="nita-nav-admin">
             <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')}>
-              <ShieldCheck size={14} style={{ verticalAlign: '-2px', marginInlineEnd: 6 }} />
+              <ShieldCheck size={14} />
               <span className="label">{t('nav_admin')}</span>
             </NavLink>
             <button onClick={logout} title={t('nav_logout')} className="nita-nav-logout-btn">
